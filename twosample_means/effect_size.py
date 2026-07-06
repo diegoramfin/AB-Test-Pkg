@@ -58,9 +58,7 @@ class EffectSizeResult:
     ci_level: float
 
 
-def cohens_d(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
-) -> EffectSizeResult:
+def cohens_d(a: np.ndarray, b: np.ndarray, config: RunConfig) -> EffectSizeResult:
     """Compute Cohen's d (pooled-SD standardized mean difference).
 
     Citation: Cohen (1988).
@@ -103,9 +101,7 @@ def cohens_d(
     )
 
 
-def hedges_g(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
-) -> EffectSizeResult:
+def hedges_g(a: np.ndarray, b: np.ndarray, config: RunConfig) -> EffectSizeResult:
     """Compute Hedges' g (bias-corrected Cohen's d).
 
     Applies the small-sample correction factor
@@ -150,9 +146,7 @@ def hedges_g(
     )
 
 
-def cliff_delta(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
-) -> EffectSizeResult:
+def cliff_delta(a: np.ndarray, b: np.ndarray, config: RunConfig) -> EffectSizeResult:
     """Compute Cliff's delta (non-parametric stochastic dominance).
 
     Citation: Cliff (1993).
@@ -191,16 +185,17 @@ def cliff_delta(
     )
 
 
-def rank_biserial(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
-) -> EffectSizeResult:
+def rank_biserial(a: np.ndarray, b: np.ndarray, config: RunConfig) -> EffectSizeResult:
     """Compute the rank-biserial correlation.
 
     Citation: Kerby (2014).
 
     Assumptions: No distributional assumptions. The rank-biserial
     correlation is the simple difference formula applied to the
-    ranks of the two samples.
+    ranks of the two samples. The CI uses the asymptotic variance
+    from Cliff (1993), which accounts for the observed effect size
+    (same formula used for Cliff's delta), rather than the null
+    variance which would produce an misleadingly narrow CI.
 
     Parameters
     ----------
@@ -219,7 +214,7 @@ def rank_biserial(
     n_b = len(b)
     u_stat, _p = stats.mannwhitneyu(a, b, alternative="two-sided")
     r = (2.0 * u_stat) / (n_a * n_b) - 1.0
-    se = np.sqrt((n_a + n_b + 1) / (12.0 * n_a * n_b))
+    se = np.sqrt((n_a + n_b - 1) * (1.0 - r**2) / (n_a * n_b))
     z_crit = stats.norm.ppf(1 - (1 - config.ci_level) / 2)
     ci_lo = float(r - z_crit * se)
     ci_hi = float(r + z_crit * se)
@@ -233,9 +228,7 @@ def rank_biserial(
     )
 
 
-def hodges_lehmann(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
-) -> EffectSizeResult:
+def hodges_lehmann(a: np.ndarray, b: np.ndarray, config: RunConfig) -> EffectSizeResult:
     """Compute the Hodges-Lehmann estimator of location shift.
 
     Citation: Hodges & Lehmann (1963).
@@ -376,6 +369,5 @@ def _cliff_delta_se(delta: float, n_a: int, n_b: int) -> float:
 def _fmt(cite: Citation) -> str:
     """Format a citation as a readable string."""
     return (
-        f"{cite['authors']} ({cite['year']}). "
-        + f"{cite['title']}. {cite['source']}."
+        f"{cite['authors']} ({cite['year']}). " + f"{cite['title']}. {cite['source']}."
     )

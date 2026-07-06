@@ -3,7 +3,7 @@
 ## Data Provenance
 
 - **Source**: A: in-memory array (500 values) | B: in-memory array (500 values)
-- **SHA-256 hash**: `ee93baa41b3e8a4de969ed2a6650f7c9e441d294ff09b50fcc2a83608d20b931`
+- **SHA-256 hash**: `de787b85275eeacb6fa8b8317893de15c983df41aa3f61cdda8fec9da98df0ce`
 
 ## Configuration
 
@@ -160,7 +160,7 @@
 
 > Brunner, E. and Munzel, U. (2000). The nonparametric Behrens-Fisher problem: asymptotic theory and a small-sample approximation. Biometrical Journal, 42(1), 17-25.
 
-- **Statistic**: -0.422502
+- **Statistic**: 0.422502
 - **p-value**: 0.672750
 - **Assumptions**: Assumes independence. Does not assume normality or equal variances.
 
@@ -193,15 +193,15 @@
 
 - **Statistic**: 0.440062
 - **95% CI**: [-1.228453, 2.136250]
-- **rope_width**: 4.114423
+- **rope_width**: 4.116482
 - **rope_scale**: auto
 - **rope_proportion**: 1.000000
-- **r_hat**: 1.000000
-- **ess**: 898.000000
+- **r_hat**: 1.010000
+- **ess**: 498.000000
 - **draws**: 500
 - **chains**: 2
 - **seed**: 42
-- **Assumptions**: Student-t likelihood (robust to outliers). Weakly informative priors per Kruschke (2013).
+- **Assumptions**: Student-t likelihood (robust to outliers). Weakly informative priors per Kruschke (2013). WARNING: MCMC convergence diagnostics below threshold (r_hat=1.0100 >= 1.01 or ess=498 <= 400). HDI may be unreliable; increase draws/chains or inspect the trace.
 
 ### JZS Bayes factor
 
@@ -241,7 +241,7 @@
 > Kerby, D. S. (2014). The simple difference formula: An approach to teaching and testing the difference between two means using the rank-biserial correlation. Practical Assessment, Research & Evaluation, 19(11), 1-3.
 
 - **Statistic**: 0.015440
-- **95% CI**: [-0.020362, 0.051242]
+- **95% CI**: [-0.108442, 0.139322]
 
 ### Hodges-Lehmann
 

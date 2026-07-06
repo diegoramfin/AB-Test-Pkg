@@ -14,42 +14,27 @@ the analyst interprets which to weight.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import numpy as np
 
-from twosample_means.assumptions import (
-    anderson_darling,
-    bartlett,
-    brown_forsythe,
-    dagostino_k2,
-    flag_outliers,
-    levene,
-    shapiro_wilk,
-)
+from twosample_means.assumptions import (anderson_darling, bartlett,
+                                         brown_forsythe, dagostino_k2,
+                                         flag_outliers, levene, shapiro_wilk)
 from twosample_means.bayesian import bayes_factor_jzs, best
 from twosample_means.citations import Citation, get_citation
 from twosample_means.config import RunConfig
 from twosample_means.data_io import LoadedData
-from twosample_means.effect_size import (
-    cliff_delta,
-    cohens_d,
-    hedges_g,
-    hodges_lehmann,
-    rank_biserial,
-)
-from twosample_means.frequentist_nonparametric import (
-    bootstrap_ci,
-    brunner_munzel,
-    mann_whitney_u,
-    permutation_test,
-)
-from twosample_means.frequentist_parametric import (
-    MissingVarianceError,
-    students_t,
-    welch_t,
-    z_test,
-)
+from twosample_means.effect_size import (cliff_delta, cohens_d, hedges_g,
+                                         hodges_lehmann, rank_biserial)
+from twosample_means.frequentist_nonparametric import (bootstrap_ci,
+                                                       brunner_munzel,
+                                                       mann_whitney_u,
+                                                       permutation_test)
+from twosample_means.frequentist_parametric import (MissingVarianceError,
+                                                    students_t, welch_t,
+                                                    z_test)
 from twosample_means.reporting import RunReport, TestResult
 
 
@@ -79,7 +64,18 @@ def run(
         source_desc = data.source_description
     else:
         a, b = data
-        data_hash = "in-memory (no hash)"
+        a_arr = np.ascontiguousarray(np.asarray(a, dtype=float))
+        b_arr = np.ascontiguousarray(np.asarray(b, dtype=float))
+        hasher = hashlib.sha256()
+        hasher.update(a_arr.tobytes())
+        hasher.update(b"|shape=")
+        hasher.update(str(a_arr.shape).encode())
+        hasher.update(b"|dtype=float64")
+        hasher.update(b_arr.tobytes())
+        hasher.update(b"|shape=")
+        hasher.update(str(b_arr.shape).encode())
+        hasher.update(b"|dtype=float64")
+        data_hash = hasher.hexdigest()
         source_desc = "in-memory arrays"
     results: list[TestResult] = []
     results.extend(_run_diagnostics(a, b, config))
@@ -271,9 +267,7 @@ def _run_parametric(
                 ci_upper=None,
                 ci_level=None,
                 extra={"skipped": True},
-                assumption_notes=(
-                    "Skipped: population variance not provided."
-                ),
+                assumption_notes=("Skipped: population variance not provided."),
             )
         )
     return results
@@ -353,9 +347,7 @@ def _run_nonparametric(
     return results
 
 
-def _run_bayesian(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
-) -> list[TestResult]:
+def _run_bayesian(a: np.ndarray, b: np.ndarray, config: RunConfig) -> list[TestResult]:
     """Run all Bayesian tests.
 
     Parameters
@@ -492,6 +484,5 @@ def _format_citation(cite: Citation) -> str:
         Formatted citation.
     """
     return (
-        f"{cite['authors']} ({cite['year']}). "
-        + f"{cite['title']}. {cite['source']}."
+        f"{cite['authors']} ({cite['year']}). " + f"{cite['title']}. {cite['source']}."
     )

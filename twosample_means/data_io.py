@@ -262,16 +262,13 @@ def _validate_array(array: np.ndarray, label: str) -> None:
     if array.size == 0:
         raise DataValidationError(f"{label}: data is empty.")
     if array.ndim != 1:
-        raise DataValidationError(
-            f"{label}: expected 1-D array, got {array.ndim}-D."
-        )
+        raise DataValidationError(f"{label}: expected 1-D array, got {array.ndim}-D.")
     if not np.issubdtype(array.dtype, np.floating):
         raise DataValidationError(f"{label}: data is not numeric.")
     if not np.all(np.isfinite(array)):
         non_finite = np.sum(~np.isfinite(array))
         raise DataValidationError(
-            f"{label}: data contains {non_finite} "
-            "non-finite value(s) (NaN or Inf)."
+            f"{label}: data contains {non_finite} " "non-finite value(s) (NaN or Inf)."
         )
     if array.size < 2:
         raise DataValidationError(
@@ -297,13 +294,20 @@ def _compute_hash(spec: InputSpec) -> str:
         A hex digest of the SHA-256 hash.
     """
     hasher = hashlib.sha256()
-    for source in (spec.sample_a, spec.sample_b):
+    for source, column in (
+        (spec.sample_a, spec.column_a),
+        (spec.sample_b, spec.column_b),
+    ):
         if isinstance(source, str | Path):
             path = Path(source)
             if path.exists():
                 hasher.update(path.read_bytes())
+                hasher.update(b"|column=")
+                hasher.update((column or "<auto>").encode("utf-8"))
         else:
-            array = np.asarray(source, dtype=float)
+            array = np.ascontiguousarray(np.asarray(source, dtype=float))
             hasher.update(array.tobytes())
+            hasher.update(b"|shape=")
             hasher.update(str(array.shape).encode())
+            hasher.update(b"|dtype=float64")
     return hasher.hexdigest()

@@ -169,7 +169,7 @@ def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
     hdi_lo = float(hdi_arr[0])
     hdi_hi = float(hdi_arr[1])
 
-    pooled_sd = float(np.std(pooled))
+    pooled_sd = float(np.std(pooled, ddof=1))
     if config.rope_scale == "auto":
         effective_rope = config.rope_width * pooled_sd
     else:
@@ -180,9 +180,25 @@ def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
         np.mean((flat_samples >= rope_lo) & (flat_samples <= rope_hi))
     )
 
-    summary = az.summary(idata, var_names=["mean_diff"])
-    r_hat = float(summary["r_hat"].values[0])
-    ess = float(summary["ess_bulk"].values[0])
+    summary = az.summary(idata)
+    r_hat = float(summary["r_hat"].max())
+    ess = float(summary["ess_bulk"].min())
+
+    r_hat_ok = r_hat < 1.01
+    ess_ok = ess > 400
+    convergence_note = ""
+    if not (r_hat_ok and ess_ok):
+        failures = []
+        if not r_hat_ok:
+            failures.append(f"r_hat={r_hat:.4f} >= 1.01")
+        if not ess_ok:
+            failures.append(f"ess={ess:.0f} <= 400")
+        convergence_note = (
+            " WARNING: MCMC convergence diagnostics below "
+            f"threshold ({', '.join(failures)}). "
+            "HDI may be unreliable; increase draws/chains "
+            "or inspect the trace."
+        )
 
     return BESTResult(
         method_name="BEST (Kruschke)",
@@ -200,7 +216,7 @@ def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
         seed=config.seed,
         assumption_notes=(
             "Student-t likelihood (robust to outliers). "
-            "Weakly informative priors per Kruschke (2013)."
+            "Weakly informative priors per Kruschke (2013)." + convergence_note
         ),
     )
 
@@ -248,15 +264,15 @@ def bayes_factor_jzs(
             alternative="two-sided",
         )
     )
+    bf01 = float("inf") if bf10 == 0 else 1.0 / bf10
     return BayesFactorResult(
         method_name="JZS Bayes factor",
         citation=_fmt(cite),
         bf10=bf10,
-        bf01=1.0 / bf10,
+        bf01=bf01,
         prior_width=config.bayes_factor_prior_width,
         assumption_notes=(
-            "JZS prior on effect size. "
-            "Bayes factor quantifies relative evidence."
+            "JZS prior on effect size. " "Bayes factor quantifies relative evidence."
         ),
     )
 
@@ -283,6 +299,5 @@ def _t_stat(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
 def _fmt(cite: Citation) -> str:
     """Format a citation as a readable string."""
     return (
-        f"{cite['authors']} ({cite['year']}). "
-        + f"{cite['title']}. {cite['source']}."
+        f"{cite['authors']} ({cite['year']}). " + f"{cite['title']}. {cite['source']}."
     )

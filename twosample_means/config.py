@@ -118,30 +118,19 @@ class RunConfig:
         if not 0.0 < self.alpha < 1.0:
             raise ValueError(f"alpha must be in (0, 1), got {self.alpha}")
         if not 0.0 < self.ci_level < 1.0:
-            raise ValueError(
-                f"ci_level must be in (0, 1), got {self.ci_level}"
-            )
+            raise ValueError(f"ci_level must be in (0, 1), got {self.ci_level}")
         if not 0.0 < self.hdi_mass < 1.0:
-            raise ValueError(
-                f"hdi_mass must be in (0, 1), got {self.hdi_mass}"
-            )
+            raise ValueError(f"hdi_mass must be in (0, 1), got {self.hdi_mass}")
         if self.rope_width <= 0.0:
-            raise ValueError(
-                f"rope_width must be positive, got {self.rope_width}"
-            )
+            raise ValueError(f"rope_width must be positive, got {self.rope_width}")
         if self.rope_scale not in ("auto", "fixed"):
             raise ValueError(
-                f"rope_scale must be 'auto' or 'fixed', "
-                f"got '{self.rope_scale}'"
+                f"rope_scale must be 'auto' or 'fixed', " f"got '{self.rope_scale}'"
             )
         if self.mcmc_draws < 100:
-            raise ValueError(
-                f"mcmc_draws must be >= 100, got {self.mcmc_draws}"
-            )
+            raise ValueError(f"mcmc_draws must be >= 100, got {self.mcmc_draws}")
         if self.mcmc_chains < 2:
-            raise ValueError(
-                f"mcmc_chains must be >= 2, got {self.mcmc_chains}"
-            )
+            raise ValueError(f"mcmc_chains must be >= 2, got {self.mcmc_chains}")
         if self.permutation_iterations < 100:
             raise ValueError(
                 "permutation_iterations must be >= 100, "
@@ -159,8 +148,7 @@ class RunConfig:
             )
         if self.outlier_threshold <= 0.0:
             raise ValueError(
-                "outlier_threshold must be positive, "
-                f"got {self.outlier_threshold}"
+                "outlier_threshold must be positive, " f"got {self.outlier_threshold}"
             )
 
 
@@ -196,3 +184,20 @@ class InputSpec:
     sample_b: str | Path | Sequence[Any]
     column_a: str | None = None
     column_b: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate input specification at construction time."""
+        if self.sample_a is None:
+            raise ValueError("sample_a must not be None")
+        if self.sample_b is None:
+            raise ValueError("sample_b must not be None")
+        if self.column_a is not None and not isinstance(self.column_a, str):
+            raise ValueError(
+                f"column_a must be a str or None, "
+                f"got {type(self.column_a).__name__}"
+            )
+        if self.column_b is not None and not isinstance(self.column_b, str):
+            raise ValueError(
+                f"column_b must be a str or None, "
+                f"got {type(self.column_b).__name__}"
+            )
