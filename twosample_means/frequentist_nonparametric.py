@@ -176,6 +176,11 @@ def brunner_munzel(
     variances. The non-parametric analogue of the Behrens-Fisher
     problem.
 
+    Note: scipy computes the statistic in the (B - A) direction;
+    we negate it so the sign follows the (A - B) convention used
+    by every other measure in the battery. The p-value is
+    unaffected (two-sided).
+
     Parameters
     ----------
     a:
@@ -195,7 +200,7 @@ def brunner_munzel(
     return NonParametricResult(
         method_name="Brunner-Munzel",
         citation=_fmt(cite),
-        statistic=float(result.statistic),
+        statistic=float(-result.statistic),
         p_value=float(result.pvalue),
         assumption_notes=(
             "Assumes independence. Does not assume " "normality or equal variances."

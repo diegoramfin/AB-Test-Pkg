@@ -180,19 +180,24 @@ def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
         np.mean((flat_samples >= rope_lo) & (flat_samples <= rope_hi))
     )
 
-    summary = az.summary(idata, var_names=["mean_diff"])
-    r_hat = float(summary["r_hat"].values[0])
-    ess = float(summary["ess_bulk"].values[0])
+    summary = az.summary(idata)
+    r_hat = float(summary["r_hat"].max())
+    ess = float(summary["ess_bulk"].min())
 
     r_hat_ok = r_hat < 1.01
     ess_ok = ess > 400
     convergence_note = ""
     if not (r_hat_ok and ess_ok):
+        failures = []
+        if not r_hat_ok:
+            failures.append(f"r_hat={r_hat:.4f} >= 1.01")
+        if not ess_ok:
+            failures.append(f"ess={ess:.0f} <= 400")
         convergence_note = (
             " WARNING: MCMC convergence diagnostics below "
-            f"threshold (r_hat={r_hat:.4f} >= 1.01 or "
-            f"ess={ess:.0f} <= 400). HDI may be unreliable; "
-            "increase draws/chains or inspect the trace."
+            f"threshold ({', '.join(failures)}). "
+            "HDI may be unreliable; increase draws/chains "
+            "or inspect the trace."
         )
 
     return BESTResult(

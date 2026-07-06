@@ -5,15 +5,13 @@ import pytest
 from scipy import stats as scipy_stats
 
 from twosample_means.config import RunConfig
-from twosample_means.frequentist_nonparametric import (
-    BootstrapResult,
-    NonParametricResult,
-    PermutationResult,
-    bootstrap_ci,
-    brunner_munzel,
-    mann_whitney_u,
-    permutation_test,
-)
+from twosample_means.frequentist_nonparametric import (BootstrapResult,
+                                                       NonParametricResult,
+                                                       PermutationResult,
+                                                       bootstrap_ci,
+                                                       brunner_munzel,
+                                                       mann_whitney_u,
+                                                       permutation_test)
 
 
 @pytest.fixture
@@ -69,11 +67,11 @@ class TestBrunnerMunzel:
         two_samples: tuple[np.ndarray, np.ndarray],
         config: RunConfig,
     ) -> None:
-        """Result matches scipy.stats.brunnermunzel."""
+        """Result sign is negated (A-B convention); p-value matches."""
         a, b = two_samples
         result = brunner_munzel(a, b, config)
         expected = scipy_stats.brunnermunzel(a, b, alternative="two-sided")
-        assert abs(result.statistic - expected.statistic) < 1e-10
+        assert abs(result.statistic - (-expected.statistic)) < 1e-10
         assert abs(result.p_value - expected.pvalue) < 1e-10
 
 
