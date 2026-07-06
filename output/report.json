@@ -1,0 +1,472 @@
+{
+  "data_hash": "ee93baa41b3e8a4de969ed2a6650f7c9e441d294ff09b50fcc2a83608d20b931",
+  "source_description": "A: in-memory array (500 values) | B: in-memory array (500 values)",
+  "config": {
+    "alpha": 0.05,
+    "ci_level": 0.95,
+    "hdi_mass": 0.95,
+    "rope_width": 0.1,
+    "rope_scale": "auto",
+    "mcmc_draws": 500,
+    "mcmc_chains": 2,
+    "permutation_iterations": 1000,
+    "bootstrap_iterations": 1000,
+    "seed": 42,
+    "population_variance_a": null,
+    "population_variance_b": null,
+    "bayes_factor_prior_width": 0.707,
+    "outlier_method": "iqr",
+    "outlier_threshold": 1.5
+  },
+  "results": [
+    {
+      "method_name": "Shapiro-Wilk (A)",
+      "category": "diagnostic",
+      "citation": "Shapiro, S. S. and Wilk, M. B. (1965). An analysis of variance test for normality (complete samples). Biometrika, 52(3-4), 591-611.",
+      "statistic": 0.541798189133885,
+      "p_value": 4.665970853041456e-34,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "not_met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Anderson-Darling (A)",
+      "category": "diagnostic",
+      "citation": "Anderson, T. W. and Darling, D. A. (1952). Asymptotic theory of certain goodness of fit criteria based on stochastic processes. Annals of Mathematical Statistics, 23(2), 193-212.",
+      "statistic": 63.02413456915599,
+      "p_value": 0.0001,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "not_met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "D'Agostino K\u00b2 (A)",
+      "category": "diagnostic",
+      "citation": "D'Agostino, R. B. and Pearson, E. S. (1973). Tests for departure from normality. Empirical results for the distributions of b2 and sqrt(b1). Biometrika, 60(3), 613-622.",
+      "statistic": 481.9406255719624,
+      "p_value": 2.2280393386472834e-105,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "not_met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Shapiro-Wilk (B)",
+      "category": "diagnostic",
+      "citation": "Shapiro, S. S. and Wilk, M. B. (1965). An analysis of variance test for normality (complete samples). Biometrika, 52(3-4), 591-611.",
+      "statistic": 0.5060515881491474,
+      "p_value": 5.079013627153279e-35,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "not_met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Anderson-Darling (B)",
+      "category": "diagnostic",
+      "citation": "Anderson, T. W. and Darling, D. A. (1952). Asymptotic theory of certain goodness of fit criteria based on stochastic processes. Annals of Mathematical Statistics, 23(2), 193-212.",
+      "statistic": 65.06265164775141,
+      "p_value": 0.0001,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "not_met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "D'Agostino K\u00b2 (B)",
+      "category": "diagnostic",
+      "citation": "D'Agostino, R. B. and Pearson, E. S. (1973). Tests for departure from normality. Empirical results for the distributions of b2 and sqrt(b1). Biometrika, 60(3), 613-622.",
+      "statistic": 591.1401027585371,
+      "p_value": 4.3207353901209574e-129,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "not_met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Levene",
+      "category": "diagnostic",
+      "citation": "Levene, H. (1960). Robust tests for equality of variances. In Olkin et al. (Eds.), Contributions to Probability and Statistics. Stanford University Press.",
+      "statistic": 0.5622073810338453,
+      "p_value": 0.45354893268204516,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Bartlett",
+      "category": "diagnostic",
+      "citation": "Bartlett, M. S. (1937). Properties of sufficiency and statistical tests. Proceedings of the Royal Society of London A, 160(901), 268-282.",
+      "statistic": 0.0348041132241491,
+      "p_value": 0.8520067250004675,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Brown-Forsythe",
+      "category": "diagnostic",
+      "citation": "Brown, M. B. and Forsythe, A. B. (1974). Robust tests for the equality of variances. Journal of the American Statistical Association, 69(346), 364-367.",
+      "statistic": 0.09616771639048917,
+      "p_value": 0.7565426598195536,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "assumption_outcome": "met"
+      },
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Outliers (A)",
+      "category": "diagnostic",
+      "citation": "Tukey, J. W. (1977). Exploratory Data Analysis. Addison-Wesley.",
+      "statistic": null,
+      "p_value": null,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "outlier_count": 48,
+        "outlier_indices": [
+          4,
+          13,
+          101,
+          109,
+          118,
+          130,
+          141,
+          164,
+          165,
+          178,
+          182,
+          200,
+          202,
+          203,
+          206,
+          208,
+          219,
+          229,
+          234,
+          237,
+          238,
+          249,
+          264,
+          267,
+          270,
+          274,
+          275,
+          295,
+          302,
+          304,
+          311,
+          317,
+          325,
+          334,
+          349,
+          352,
+          372,
+          374,
+          379,
+          386,
+          395,
+          405,
+          423,
+          439,
+          446,
+          460,
+          461,
+          470
+        ],
+        "threshold": 1.5
+      },
+      "assumption_notes": "Outliers flagged but NOT removed."
+    },
+    {
+      "method_name": "Outliers (B)",
+      "category": "diagnostic",
+      "citation": "Tukey, J. W. (1977). Exploratory Data Analysis. Addison-Wesley.",
+      "statistic": null,
+      "p_value": null,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "outlier_count": 45,
+        "outlier_indices": [
+          5,
+          33,
+          46,
+          48,
+          55,
+          63,
+          64,
+          67,
+          88,
+          90,
+          92,
+          95,
+          96,
+          104,
+          132,
+          135,
+          140,
+          141,
+          142,
+          144,
+          147,
+          156,
+          171,
+          199,
+          242,
+          275,
+          286,
+          306,
+          309,
+          323,
+          342,
+          357,
+          363,
+          389,
+          393,
+          400,
+          430,
+          433,
+          439,
+          449,
+          450,
+          464,
+          467,
+          485,
+          488
+        ],
+        "threshold": 1.5
+      },
+      "assumption_notes": "Outliers flagged but NOT removed."
+    },
+    {
+      "method_name": "Student's t-test",
+      "category": "parametric",
+      "citation": "Student (Gosset, W. S.) (1908). The probable error of a mean. Biometrika, 6(1), 1-25.",
+      "statistic": 0.47225867828417756,
+      "p_value": 0.6368454062984862,
+      "ci_lower": -3.880933989853923,
+      "ci_upper": 6.340933989853924,
+      "ci_level": 0.95,
+      "extra": {
+        "degrees_of_freedom": 998.0,
+        "mean_difference": 1.2300000000000004
+      },
+      "assumption_notes": "Assumes independence, normality, and equal variances."
+    },
+    {
+      "method_name": "Welch's t-test",
+      "category": "parametric",
+      "citation": "Welch, B. L. (1947). The generalization of 'Student's' problem when several different population variances are involved. Biometrika, 34(1-2), 28-35.",
+      "statistic": 0.47225867828417767,
+      "p_value": 0.636845413505482,
+      "ci_lower": -3.880934423109835,
+      "ci_upper": 6.340934423109836,
+      "ci_level": 0.95,
+      "extra": {
+        "degrees_of_freedom": 997.9303293222189,
+        "mean_difference": 1.2300000000000004
+      },
+      "assumption_notes": "Assumes independence and normality. Does not assume equal variances."
+    },
+    {
+      "method_name": "z-test",
+      "category": "parametric",
+      "citation": "Neyman, J. and Pearson, E. S. (1933). On the problem of the most efficient tests of statistical hypotheses. Philosophical Transactions of the Royal Society of London A, 231, 289-337.",
+      "statistic": null,
+      "p_value": null,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "skipped": true
+      },
+      "assumption_notes": "Skipped: population variance not provided."
+    },
+    {
+      "method_name": "Mann-Whitney U",
+      "category": "nonparametric",
+      "citation": "Mann, H. B. and Whitney, D. R. (1947). On a test of whether one of two random variables is stochastically larger than the other. Annals of Mathematical Statistics, 18(1), 50-60.",
+      "statistic": 126930.0,
+      "p_value": 0.6723008004704872,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {},
+      "assumption_notes": "Assumes independence. Does not assume normality."
+    },
+    {
+      "method_name": "Brunner-Munzel",
+      "category": "nonparametric",
+      "citation": "Brunner, E. and Munzel, U. (2000). The nonparametric Behrens-Fisher problem: asymptotic theory and a small-sample approximation. Biometrical Journal, 42(1), 17-25.",
+      "statistic": -0.4225020081278877,
+      "p_value": 0.6727496447436715,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {},
+      "assumption_notes": "Assumes independence. Does not assume normality or equal variances."
+    },
+    {
+      "method_name": "Permutation test (Monte Carlo)",
+      "category": "nonparametric",
+      "citation": "Fisher, R. A. (1935). The Design of Experiments. Oliver and Boyd, Edinburgh.",
+      "statistic": 1.2300000000000004,
+      "p_value": 0.6503496503496503,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "mode": "monte_carlo",
+        "iterations": 1000,
+        "seed": 42
+      },
+      "assumption_notes": "Assumes independence and exchangeability under the null."
+    },
+    {
+      "method_name": "Bootstrap CI",
+      "category": "nonparametric",
+      "citation": "Efron, B. and Tibshirani, R. J. (1993). An Introduction to the Bootstrap. Chapman & Hall/CRC, New York.",
+      "statistic": 1.2300000000000004,
+      "p_value": null,
+      "ci_lower": -3.8478499999999984,
+      "ci_upper": 6.022849999999997,
+      "ci_level": 0.95,
+      "extra": {
+        "iterations": 1000,
+        "seed": 42
+      },
+      "assumption_notes": "Bootstrap percentile CI."
+    },
+    {
+      "method_name": "BEST (Kruschke)",
+      "category": "bayesian",
+      "citation": "Kruschke, J. K. (2013). Bayesian estimation supersedes the t test. Journal of Experimental Psychology: General, 142(2), 573-603.",
+      "statistic": 0.44006173011200955,
+      "p_value": null,
+      "ci_lower": -1.228452854022068,
+      "ci_upper": 2.1362496211520643,
+      "ci_level": 0.95,
+      "extra": {
+        "rope_width": 4.114423205019143,
+        "rope_scale": "auto",
+        "rope_proportion": 1.0,
+        "r_hat": 1.0,
+        "ess": 898.0,
+        "draws": 500,
+        "chains": 2,
+        "seed": 42
+      },
+      "assumption_notes": "Student-t likelihood (robust to outliers). Weakly informative priors per Kruschke (2013)."
+    },
+    {
+      "method_name": "JZS Bayes factor",
+      "category": "bayesian",
+      "citation": "Rouder, J. N., Speckman, P. L., Sun, D., Morey, R. D., and Iverson, G. (2009). Bayesian t tests for accepting and rejecting the null hypothesis. Psychonomic Bulletin & Review, 16(2), 225-237.",
+      "statistic": 0.07904407144078376,
+      "p_value": null,
+      "ci_lower": null,
+      "ci_upper": null,
+      "ci_level": null,
+      "extra": {
+        "bf10": 0.07904407144078376,
+        "bf01": 12.651170186105034,
+        "prior_width": 0.707
+      },
+      "assumption_notes": "JZS prior on effect size. Bayes factor quantifies relative evidence."
+    },
+    {
+      "method_name": "Cohen's d",
+      "category": "effect_size",
+      "citation": "Cohen, J. (1988). Statistical Power Analysis for the Behavioral Sciences (2nd ed.). Lawrence Erlbaum, Hillsdale, NJ.",
+      "statistic": 0.02986826136317401,
+      "p_value": null,
+      "ci_lower": -0.0942481806,
+      "ci_upper": 0.1539847033,
+      "ci_level": 0.95,
+      "extra": {},
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Hedges' g",
+      "category": "effect_size",
+      "citation": "Hedges, L. V. (1981). Distribution theory for Glass's estimator of effect size and related estimators. Journal of Educational Statistics, 6(2), 107-128.",
+      "statistic": 0.02984580965079878,
+      "p_value": null,
+      "ci_lower": -0.0942706219,
+      "ci_upper": 0.1539622412,
+      "ci_level": 0.95,
+      "extra": {},
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Cliff's delta",
+      "category": "effect_size",
+      "citation": "Cliff, N. (1993). Dominance statistics: Ordinal analyses to answer ordinal questions. Psychological Bulletin, 114(3), 494-509.",
+      "statistic": 0.01544,
+      "p_value": null,
+      "ci_lower": -0.10844224244749708,
+      "ci_upper": 0.13932224244749708,
+      "ci_level": 0.95,
+      "extra": {},
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Rank-biserial",
+      "category": "effect_size",
+      "citation": "Kerby, D. S. (2014). The simple difference formula: An approach to teaching and testing the difference between two means using the rank-biserial correlation. Practical Assessment, Research & Evaluation, 19(11), 1-3.",
+      "statistic": 0.015439999999999898,
+      "p_value": null,
+      "ci_lower": -0.02036177034503016,
+      "ci_upper": 0.051241770345029955,
+      "ci_level": 0.95,
+      "extra": {},
+      "assumption_notes": ""
+    },
+    {
+      "method_name": "Hodges-Lehmann",
+      "category": "effect_size",
+      "citation": "Hodges, J. L. and Lehmann, E. L. (1963). Estimation of location based on rank tests. Annals of Mathematical Statistics, 34(2), 598-611.",
+      "statistic": 0.0,
+      "p_value": null,
+      "ci_lower": -1.0,
+      "ci_upper": 2.0,
+      "ci_level": 0.95,
+      "extra": {},
+      "assumption_notes": ""
+    }
+  ]
+}

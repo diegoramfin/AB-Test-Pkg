@@ -1,0 +1,10 @@
+# Services and commands configuration
+# Single source of truth for operations
+
+commands:
+  test: "uv run pytest -q"
+  typecheck: "uv run mypy twosample_means"
+  lint: "uv run ruff check twosample_means tests"
+  notebook_test: "uv run pytest --nbmake notebooks/two_sample_mean_test.ipynb"
+
+services: []
