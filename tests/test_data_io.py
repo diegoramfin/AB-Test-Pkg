@@ -56,6 +56,26 @@ class TestLoadFromArrays:
         )
         assert load(spec1).data_hash != load(spec2).data_hash
 
+    def test_hash_includes_column_name(self, tmp_path: Path) -> None:
+        """Same file, different columns must yield different hashes."""
+        csv_path = tmp_path / "data.csv"
+        pd.DataFrame({"control": [1.0, 2.0, 3.0], "treatment": [4.0, 5.0, 6.0]}).to_csv(
+            csv_path, index=False
+        )
+        spec_ctrl = InputSpec(
+            sample_a=csv_path,
+            sample_b=csv_path,
+            column_a="control",
+            column_b="control",
+        )
+        spec_treat = InputSpec(
+            sample_a=csv_path,
+            sample_b=csv_path,
+            column_a="treatment",
+            column_b="treatment",
+        )
+        assert load(spec_ctrl).data_hash != load(spec_treat).data_hash
+
 
 class TestLoadFromCSV:
     """Tests for CSV file input."""
@@ -63,9 +83,9 @@ class TestLoadFromCSV:
     def test_loads_csv_with_column(self, tmp_path: Path) -> None:
         """CSV loads with a specified column."""
         csv_path = tmp_path / "data.csv"
-        pd.DataFrame(
-            {"group": ["a", "b", "c"], "value": [1.0, 2.0, 3.0]}
-        ).to_csv(csv_path, index=False)
+        pd.DataFrame({"group": ["a", "b", "c"], "value": [1.0, 2.0, 3.0]}).to_csv(
+            csv_path, index=False
+        )
         spec = InputSpec(
             sample_a=csv_path,
             sample_b=csv_path,

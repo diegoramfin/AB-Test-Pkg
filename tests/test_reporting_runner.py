@@ -7,13 +7,8 @@ import numpy as np
 import pytest
 
 from twosample_means.config import RunConfig
-from twosample_means.reporting import (
-    RunReport,
-    TestResult,
-    render_json,
-    render_markdown,
-    write_report,
-)
+from twosample_means.reporting import (RunReport, TestResult, render_json,
+                                       render_markdown, write_report)
 
 
 @pytest.fixture
@@ -56,9 +51,7 @@ def sample_report() -> RunReport:
 class TestReporting:
     """Tests for the reporting module."""
 
-    def test_markdown_contains_all_sections(
-        self, sample_report: RunReport
-    ) -> None:
+    def test_markdown_contains_all_sections(self, sample_report: RunReport) -> None:
         """Markdown contains all expected sections."""
         md = render_markdown(sample_report)
         assert "# Two-Sample Mean Difference" in md
@@ -69,17 +62,13 @@ class TestReporting:
         assert "Welch" in md
         assert "Mann-Whitney" in md
 
-    def test_markdown_contains_citations(
-        self, sample_report: RunReport
-    ) -> None:
+    def test_markdown_contains_citations(self, sample_report: RunReport) -> None:
         """Markdown contains citations."""
         md = render_markdown(sample_report)
         assert "Welch (1947)" in md
         assert "Mann & Whitney (1947)" in md
 
-    def test_markdown_contains_no_decision(
-        self, sample_report: RunReport
-    ) -> None:
+    def test_markdown_contains_no_decision(self, sample_report: RunReport) -> None:
         """Markdown states no decision is made."""
         md = render_markdown(sample_report)
         assert "accept/reject" in md.lower()
@@ -92,9 +81,7 @@ class TestReporting:
         assert len(parsed["results"]) == 2
         assert parsed["results"][0]["method_name"] == ("Welch's t-test")
 
-    def test_write_report(
-        self, sample_report: RunReport, tmp_path: Path
-    ) -> None:
+    def test_write_report(self, sample_report: RunReport, tmp_path: Path) -> None:
         """write_report creates both files."""
         md_path, json_path = write_report(sample_report, tmp_path)
         assert md_path.exists()
@@ -145,3 +132,21 @@ class TestRunner:
         report = run((a, b), config)
         for result in report.results:
             assert len(result.citation) > 0
+
+    def test_run_tuple_input_has_real_hash(self) -> None:
+        """Tuple input produces a real SHA-256 hash, not a placeholder."""
+        from twosample_means.runner import run
+
+        rng = np.random.default_rng(42)
+        a = rng.normal(5.0, 1.0, size=30)
+        b = rng.normal(5.5, 1.0, size=30)
+        config = RunConfig(
+            mcmc_draws=100,
+            mcmc_chains=2,
+            permutation_iterations=100,
+            bootstrap_iterations=100,
+        )
+        report = run((a, b), config)
+        assert report.data_hash != "in-memory (no hash)"
+        assert len(report.data_hash) == 64
+        int(report.data_hash, 16)  # valid hex

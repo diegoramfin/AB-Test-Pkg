@@ -198,8 +198,7 @@ def brunner_munzel(
         statistic=float(result.statistic),
         p_value=float(result.pvalue),
         assumption_notes=(
-            "Assumes independence. Does not assume "
-            "normality or equal variances."
+            "Assumes independence. Does not assume " "normality or equal variances."
         ),
     )
 
@@ -249,9 +248,7 @@ def permutation_test(
     )
 
 
-def bootstrap_ci(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
-) -> BootstrapResult:
+def bootstrap_ci(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BootstrapResult:
     """Compute a bootstrap CI for the mean difference.
 
     Resamples each group with replacement and computes the percentile
@@ -339,7 +336,7 @@ def _permutation_exact(
         if abs(perm_diff) >= abs(observed_diff):
             count_extreme += 1
         total_perms += 1
-    p_value = count_extreme / total_perms
+    p_value = (count_extreme + 1) / (total_perms + 1)
     return PermutationResult(
         method_name="Permutation test (exact)",
         citation=_fmt(cite),
@@ -348,9 +345,7 @@ def _permutation_exact(
         mode="exact",
         iterations=total_perms,
         seed=None,
-        assumption_notes=(
-            "Assumes independence and exchangeability under the null."
-        ),
+        assumption_notes=("Assumes independence and exchangeability under the null."),
     )
 
 
@@ -403,15 +398,12 @@ def _permutation_montecarlo(
         mode="monte_carlo",
         iterations=iterations,
         seed=seed,
-        assumption_notes=(
-            "Assumes independence and exchangeability under the null."
-        ),
+        assumption_notes=("Assumes independence and exchangeability under the null."),
     )
 
 
 def _fmt(cite: Citation) -> str:
     """Format a citation as a readable string."""
     return (
-        f"{cite['authors']} ({cite['year']}). "
-        + f"{cite['title']}. {cite['source']}."
+        f"{cite['authors']} ({cite['year']}). " + f"{cite['title']}. {cite['source']}."
     )

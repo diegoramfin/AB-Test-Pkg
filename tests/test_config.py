@@ -116,6 +116,20 @@ class TestInputSpec:
         with pytest.raises(AttributeError):
             spec.column_a = "x"  # type: ignore[misc]
 
+    def test_rejects_none_sample(self) -> None:
+        """InputSpec rejects None samples."""
+        with pytest.raises(ValueError, match="sample_a"):
+            InputSpec(sample_a=None, sample_b=[1.0])
+
+    def test_rejects_non_string_column(self) -> None:
+        """InputSpec rejects non-string column names."""
+        with pytest.raises(ValueError, match="column_a"):
+            InputSpec(
+                sample_a=[1.0],
+                sample_b=[2.0],
+                column_a=123,  # type: ignore[arg-type]
+            )
+
 
 class TestCitationsRegistry:
     """Tests for the citations registry."""
