@@ -20,6 +20,7 @@ from .continuous import (
     estimate_continuous_metric,
 )
 from .count import estimate_count_metric
+from .cuped import CupedMetricResult, CupedSummary, estimate_cuped_metric
 from .data import (
     NormalizedExperimentData,
     load_separate_experiment_csvs,
@@ -64,6 +65,9 @@ __all__ = [
     "estimate_binary_metric",
     "estimate_count_metric",
     "estimate_ratio_metric",
+    "estimate_cuped_metric",
+    "CupedMetricResult",
+    "CupedSummary",
     "estimate_mde",
     "simulate_power",
     "alpha_spending_boundaries",

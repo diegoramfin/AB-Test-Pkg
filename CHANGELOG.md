@@ -14,6 +14,9 @@ All notable changes to `twosample-means` are documented here.
 - CLI `--expected-allocation` flag that enables the sample-ratio mismatch test.
 - Strict validation of rendered experiment JSON against the bundled schema.
 - Dataset quality flags with fetch-time warnings for teaching-only datasets.
+- CUPED variance reduction for continuous and count metrics with CLI
+  `--covariate` support.
+- ``CONTRIBUTING.md`` and ``SECURITY.md`` release-hygiene documentation.
 
 ## [0.2.0] - 2026-08-19
 

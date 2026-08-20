@@ -91,6 +91,7 @@ class NormalizedExperimentData:
     analysis_rows: int
     excluded_rows: int
     missing_outcomes: dict[str, int]
+    missing_covariates: dict[str, int]
 
     @property
     def arm_counts(self) -> dict[str, int]:
@@ -140,8 +141,11 @@ def normalize_experiment_data(
 
     _validate_units_and_assignment(frame, config)
     missing_outcomes: dict[str, int] = {}
+    missing_covariates: dict[str, int] = {}
     for metric in config.metrics:
-        missing_outcomes[metric.name] = _normalize_metric(frame, metric)
+        outcome_missing, covariate_missing = _normalize_metric(frame, metric)
+        missing_outcomes[metric.name] = outcome_missing
+        missing_covariates[metric.name] = covariate_missing
 
     return NormalizedExperimentData(
         frame=frame,
@@ -153,6 +157,7 @@ def normalize_experiment_data(
         analysis_rows=len(frame),
         excluded_rows=source_rows - len(frame),
         missing_outcomes=missing_outcomes,
+        missing_covariates=missing_covariates,
     )
 
 
@@ -236,8 +241,12 @@ def _validate_units_and_assignment(
         )
 
 
-def _normalize_metric(frame: pd.DataFrame, metric: MetricSpec) -> int:
+def _normalize_metric(
+    frame: pd.DataFrame,
+    metric: MetricSpec,
+) -> tuple[int, int]:
     """Validate and canonicalize one metric's input columns in place."""
+    covariate_missing = _normalize_covariate(frame, metric)
     if metric.kind == "ratio":
         assert metric.numerator is not None
         assert metric.denominator is not None
@@ -257,7 +266,7 @@ def _normalize_metric(frame: pd.DataFrame, metric: MetricSpec) -> int:
             )
         frame[metric.numerator] = numerator.astype(float)
         frame[metric.denominator] = denominator.astype(float)
-        return missing
+        return missing, covariate_missing
 
     series = _numeric_series(frame, metric.column, metric.name)
     missing = int(series.isna().sum())
@@ -287,6 +296,24 @@ def _normalize_metric(frame: pd.DataFrame, metric: MetricSpec) -> int:
         )
     else:
         frame[metric.column] = series.astype(float)
+    return missing, covariate_missing
+
+
+def _normalize_covariate(
+    frame: pd.DataFrame,
+    metric: MetricSpec,
+) -> int:
+    """Validate and canonicalize an optional CUPED covariate column."""
+    if metric.covariate is None:
+        return 0
+    series = _numeric_series(frame, metric.covariate, metric.name)
+    missing = int(series.isna().sum())
+    if missing and metric.missing == "error":
+        raise DataValidationError(
+            f"metric '{metric.name}' covariate '{metric.covariate}' "
+            f"contains {missing} missing value(s)"
+        )
+    frame[metric.covariate] = series.astype(float)
     return missing
 
 
@@ -296,7 +323,10 @@ def _metric_input_columns(metric: MetricSpec) -> tuple[str, ...]:
         assert metric.numerator is not None
         assert metric.denominator is not None
         return metric.numerator, metric.denominator
-    return (metric.column,)
+    columns = [metric.column]
+    if metric.covariate is not None:
+        columns.append(metric.covariate)
+    return tuple(columns)
 
 
 def _numeric_series(

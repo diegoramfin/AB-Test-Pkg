@@ -23,6 +23,12 @@ class MetricSpec:
     proportion points for binary metrics, outcome units for continuous/count
     metrics, and ratio units for ratio metrics. It is a reporting threshold,
     not a statistical decision rule.
+
+    ``covariate`` enables CUPED variance reduction for continuous and count
+    metrics. The column must contain pre-experiment values measured before
+    treatment; the estimator adjusts outcomes with the pooled covariate slope
+    and reports the variance reduction. It is the caller's responsibility to
+    confirm the covariate predates treatment.
     """
 
     name: str
@@ -35,6 +41,7 @@ class MetricSpec:
     success_value: int | bool = 1
     numerator: str | None = None
     denominator: str | None = None
+    covariate: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the metric declaration."""
@@ -97,6 +104,20 @@ class MetricSpec:
             raise ValueError(
                 "success_value is only configurable for binary metrics"
             )
+        if self.covariate is not None:
+            if (
+                not isinstance(self.covariate, str)
+                or not self.covariate.strip()
+            ):
+                raise ValueError("covariate must be a non-empty string")
+            if self.kind not in ("continuous", "count"):
+                raise ValueError(
+                    "covariate is only valid for continuous and count metrics"
+                )
+            if self.covariate == self.column:
+                raise ValueError(
+                    "covariate must differ from the metric column"
+                )
 
 
 @dataclass(frozen=True)
@@ -229,6 +250,7 @@ class ExperimentConfig:
                 metric.column,
                 metric.numerator,
                 metric.denominator,
+                metric.covariate,
             )
             if column is not None
         }

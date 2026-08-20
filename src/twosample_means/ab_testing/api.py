@@ -10,6 +10,7 @@ from .binary import estimate_binary_metric
 from .config import ContrastSpec, ExperimentConfig, MetricSpec
 from .continuous import estimate_continuous_metric
 from .count import estimate_count_metric
+from .cuped import estimate_cuped_metric
 from .data import NormalizedExperimentData, normalize_experiment_data
 from .diagnostics import diagnose_assignment
 from .multiplicity import apply_multiplicity
@@ -109,6 +110,12 @@ def _estimate_metric(
             control=control,
             treatments=tuple(arm for arm in all_arms if arm != control),
         )
+    if metric.covariate is not None:
+        if metric.kind != "binary" and metric.kind != "ratio":
+            return estimate_cuped_metric(
+                normalized, comparison_config, metric, treatment=treatment
+            )
+        raise ValueError(f"covariate is not valid for kind={metric.kind!r}")
     if metric.kind == "binary":
         return estimate_binary_metric(
             normalized, comparison_config, metric, treatment=treatment

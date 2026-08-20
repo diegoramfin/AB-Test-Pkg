@@ -117,6 +117,15 @@ uv run twosample-means experiment data/checkout.csv ... \
   --expected-allocation control=0.5,treatment=0.5
 ```
 
+CUPED variance reduction is available from the CLI for continuous and count
+metrics with a pre-experiment column:
+
+```bash
+uv run twosample-means experiment data/checkout.csv \
+  ... --metric revenue=revenue:continuous:primary \
+  --covariate revenue=pre_period_spend
+```
+
 Every generated `report.json` is validated against the bundled
 `experiment-result-v1` JSON Schema before it is written, so rendered reports
 cannot silently drift from the declared contract.
@@ -232,6 +241,12 @@ nominal `ci_lower`/`ci_upper` fields remain available alongside
 - `kind="ratio"` requires `numerator="..."` and `denominator="..."` columns
   and estimates a ratio of user-level means with delta-method uncertainty.
   Denominators must be positive.
+- `MetricSpec(covariate="pre_period_column")` enables CUPED variance
+  reduction (Deng et al., 2013) for continuous and count metrics. Outcomes
+  are adjusted with the pooled covariate slope; the report shows the
+  adjusted effect, within-arm covariate correlation, theta, and the
+  variance reduction percentage. CUPED assumes the covariate is measured
+  before treatment — the caller declares and verifies that.
 - `ContrastSpec` declares named treatment-vs-control or arbitrary arm
   contrasts for multi-arm experiments. Unspecified multi-arm analyses are
   rejected rather than silently generating comparisons.
@@ -278,6 +293,8 @@ TWOSAMPLE_MEANS_WHEEL_OFFLINE=1 uv run pytest tests/test_wheel_cli.py
 src/twosample_means/  # library and terminal commands
 data/demos/       # packaged, versioned demo data
 tests/            # automated test suite
+CONTRIBUTING.md   # contribution and quality-gate guidance
+SECURITY.md       # vulnerability reporting policy
 ```
 
 ## Design principles

@@ -7,10 +7,16 @@ from typing import Any
 
 from .binary import BinaryMetricResult
 from .continuous import ContinuousMetricResult
+from .cuped import CupedMetricResult
 from .diagnostics import AssignmentDiagnostics
 from .ratio import RatioMetricResult
 
-MetricResult = BinaryMetricResult | ContinuousMetricResult | RatioMetricResult
+MetricResult = (
+    BinaryMetricResult
+    | ContinuousMetricResult
+    | RatioMetricResult
+    | CupedMetricResult
+)
 
 
 @dataclass(frozen=True)

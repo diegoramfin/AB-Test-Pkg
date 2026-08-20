@@ -358,7 +358,13 @@ def _render_experiment_metric(metric: Any) -> list[str]:
     lines.extend(_render_arm_summary("Control", metric.control))
     lines.extend(_render_arm_summary("Treatment", metric.treatment))
     for label, value in (
-        ("Absolute effect", metric.absolute_effect),
+        ("Absolute effect (adjusted)", metric.absolute_effect),
+        (
+            "Absolute effect (unadjusted)",
+            getattr(metric, "unadjusted_absolute_effect", None),
+        ),
+        ("Variance reduction", getattr(metric, "variance_reduction", None)),
+        ("CUPED theta", getattr(metric, "theta", None)),
         ("Relative lift", metric.relative_lift),
         ("Standard error", getattr(metric, "standard_error", None)),
         ("p-value", metric.p_value),
@@ -408,6 +414,9 @@ def _render_arm_summary(label: str, summary: Any) -> list[str]:
     else:
         values.append(f"mean={summary.mean}")
         values.append(f"sd={summary.standard_deviation}")
+        unadjusted_mean = getattr(summary, "unadjusted_mean", None)
+        if unadjusted_mean is not None:
+            values.append(f"unadjusted_mean={unadjusted_mean}")
     return [f"- **{label}**: {', '.join(values)}"]
 
 

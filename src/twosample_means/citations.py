@@ -173,6 +173,16 @@ CITATIONS: dict[str, Citation] = {
         ),
         "source": ("Psychonomic Bulletin & Review, 16(2), 225-237"),
     },
+    "cuped": {
+        "authors": "Deng, A., Xu, Y., Kohavi, R., and Walker, T.",
+        "year": 2013,
+        "title": (
+            "Improving the sensitivity of online controlled "
+            "experiments by utilizing pre-experiment data"
+        ),
+        "source": "Proceedings of the Sixth ACM International "
+        "Conference on Web Search and Data Mining (WSDM), 123-132",
+    },
     "cohen_d": {
         "authors": "Cohen, J.",
         "year": 1988,

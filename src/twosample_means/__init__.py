@@ -5,8 +5,10 @@ between two independent samples using an exhaustive battery of
 hypothesis tests spanning three paradigms: frequentist parametric,
 frequentist non-parametric, and Bayesian. Every method is a thin wrapper
 over a proven library implementation (scipy, PyMC, pingouin) and is
-backed by an academic citation in the citations
-registry.
+backed by an academic citation in the citations registry. The
+``twosample_means.ab_testing`` namespace adds experiment-level binary,
+continuous, count, and ratio metric analysis with assignment diagnostics,
+multiplicity correction, and CUPED variance reduction.
 
 The procedure is report-only: it computes and returns evidence (test
 statistics, p-values, Bayes factors, posteriors, effect sizes,

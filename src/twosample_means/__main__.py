@@ -288,6 +288,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     experiment_parser.add_argument(
+        "--covariate",
+        action="append",
+        default=[],
+        metavar="NAME=COLUMN",
+        help=(
+            "Enable CUPED variance reduction for a continuous or count "
+            "metric using a pre-experiment column; repeat as needed."
+        ),
+    )
+    experiment_parser.add_argument(
         "--metric-family",
         action="append",
         default=[],
@@ -556,11 +566,17 @@ def _build_experiment_config(
             "choose either a positional experiment CSV or --csv-a/--csv-b"
         )
     family_overrides = _parse_metric_families(args.metric_family)
+    covariate_overrides = _parse_covariates(args.covariate)
     expected_allocation = _parse_expected_allocation(args.expected_allocation)
     metrics = tuple(
-        _parse_metric_definition(definition, family_overrides)
+        _parse_metric_definition(
+            definition,
+            family_overrides,
+            covariate_overrides,
+        )
         for definition in args.metric
     )
+
     metric_names = {metric.name for metric in metrics}
     unknown_families = set(family_overrides).difference(metric_names)
     if unknown_families:
@@ -591,6 +607,7 @@ def _build_experiment_config(
 def _parse_metric_definition(
     definition: str,
     family_overrides: dict[str, str],
+    covariate_overrides: dict[str, str],
 ) -> MetricSpec:
     """Parse ``NAME=COLUMN:KIND[:ROLE]`` into a MetricSpec."""
     if "=" not in definition:
@@ -631,6 +648,7 @@ def _parse_metric_definition(
             family=family_overrides.get(name, "default"),
             numerator=numerator,
             denominator=denominator,
+            covariate=covariate_overrides.get(name),
         )
     return MetricSpec(
         name=name,
@@ -638,7 +656,25 @@ def _parse_metric_definition(
         kind=kind,
         role=role,
         family=family_overrides.get(name, "default"),
+        covariate=covariate_overrides.get(name),
     )
+
+
+def _parse_covariates(values: list[str]) -> dict[str, str]:
+    """Parse repeated ``NAME=COLUMN`` CUPED covariate overrides."""
+    covariates: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError("covariates must use NAME=COLUMN")
+        name, column = (part.strip() for part in value.split("=", maxsplit=1))
+        if not name or not column:
+            raise ValueError(
+                "covariate metric names and columns must be non-empty"
+            )
+        if name in covariates:
+            raise ValueError(f"covariate specified more than once: {name!r}")
+        covariates[name] = column
+    return covariates
 
 
 def _parse_expected_allocation(

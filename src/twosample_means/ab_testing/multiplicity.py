@@ -11,6 +11,7 @@ import scipy.stats as stats
 from .binary import BinaryMetricResult, _newcombe_difference_ci
 from .config import Multiplicity, MultiplicityScope
 from .continuous import ContinuousMetricResult
+from .cuped import CupedMetricResult
 from .ratio import RatioMetricResult
 from .results import MetricResult
 
@@ -207,6 +208,22 @@ def _interval_at_level(
             level,
         )
     if isinstance(result, ContinuousMetricResult):
+        if (
+            result.absolute_effect is None
+            or result.standard_error is None
+            or result.degrees_of_freedom is None
+        ):
+            return None
+        critical_value = stats.t.ppf(
+            (1.0 + level) / 2.0,
+            result.degrees_of_freedom,
+        )
+        margin = critical_value * result.standard_error
+        return (
+            result.absolute_effect - margin,
+            result.absolute_effect + margin,
+        )
+    if isinstance(result, CupedMetricResult):
         if (
             result.absolute_effect is None
             or result.standard_error is None
