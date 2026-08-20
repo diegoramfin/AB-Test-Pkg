@@ -70,6 +70,16 @@ def diagnose_assignment(
     multi_arm_units = _multi_arm_unit_count(unit_series, assignment_series)
 
     warnings: list[str] = []
+    if config.unit_type == "aggregate":
+        warnings.append(
+            "Data is declared aggregate-level; assignment diagnostics and "
+            "standard errors describe aggregate rows, not individual users."
+        )
+    elif config.unit_type == "unknown":
+        warnings.append(
+            "Unit type is unknown. Confirm that each row represents the "
+            "declared randomization unit before interpreting causal effects."
+        )
     if missing_unit:
         warnings.append(f"{missing_unit} row(s) have missing unit IDs.")
     if duplicate_units:

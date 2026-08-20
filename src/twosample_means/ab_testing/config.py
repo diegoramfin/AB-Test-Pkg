@@ -12,6 +12,7 @@ MetricRole = Literal["primary", "secondary", "guardrail"]
 MissingPolicy = Literal["exclude", "error"]
 Multiplicity = Literal["none", "holm", "fdr_bh"]
 MultiplicityScope = Literal["family", "global"]
+UnitType = Literal["user", "aggregate", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,7 @@ class ExperimentConfig:
     alpha: float = 0.05
     multiplicity: Multiplicity = "holm"
     multiplicity_scope: MultiplicityScope = "family"
+    unit_type: UnitType = "user"
     expected_allocation: dict[str, float] | None = None
     time_column: str | None = None
     analysis_start: str | None = None
@@ -245,6 +247,11 @@ class ExperimentConfig:
             raise ValueError(
                 "multiplicity_scope must be 'family' or 'global', "
                 f"got {self.multiplicity_scope!r}"
+            )
+        if self.unit_type not in ("user", "aggregate", "unknown"):
+            raise ValueError(
+                "unit_type must be 'user', 'aggregate', or 'unknown', "
+                f"got {self.unit_type!r}"
             )
         if self.time_column is None and (
             self.analysis_start is not None or self.analysis_end is not None

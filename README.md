@@ -1,13 +1,14 @@
 # twosample-means
 
 An auditable terminal-first analysis engine for independent two-sample
-continuous outcomes. It reports frequentist, non-parametric, Bayesian, and
-effect-size estimates without making accept/reject decisions.
+outcomes and randomized experiments. It reports binary, continuous, count, and
+ratio estimates plus frequentist, non-parametric, Bayesian, and effect-size
+results without making accept/reject decisions.
 
-This is not a general A/B experimentation suite: it does not yet provide
-power planning, sequential monitoring, or binary/count/ratio metrics beyond the
-experiment-level API described below. Treat the legacy battery as sensitivity
-analysis, not independent confirmatory evidence.
+This is not a general A/B experimentation suite: it does not provide
+assignment generation, automatic causal validation, or guaranteed user-level
+randomization. Treat the legacy battery as sensitivity analysis, not
+independent confirmatory evidence.
 
 ## Quick start: conversion-rate analysis
 
@@ -58,8 +59,16 @@ uv run twosample-means analyze \
   --output artifacts/marketing-spend
 ```
 
-The initial fetch workflow supports Kaggle dataset
-`amirmotefaker/ab-testing-dataset`. It reuses a complete local cache. Configure
+The registry currently supports:
+
+| Name | Dataset | Expected rows |
+|---|---|---|
+| `marketing-campaign-ab` | `amirmotefaker/ab-testing-dataset` | campaign-day aggregates |
+| `landing-page-ab` | `zhangluyuan/ab-testing` | expected user rows; validate duplicates |
+
+Each cache includes `manifest.json` with source URL, license guidance,
+aggregation level, expected unit semantics, and expected columns. The manifest
+is descriptive and does not certify randomization or causal validity. Configure
 Kaggle separately with its official CLI before fetching.
 
 ## CLI usage
@@ -97,9 +106,33 @@ simultaneous intervals. `--multiplicity-scope family` (the default) corrects
 within each `--metric-family`; `--multiplicity-scope global` pools every
 estimable metric into one correction family.
 
-For two separate CSVs, pass `--csv-a`, `--col-a`, `--csv-b`, and `--col-b`.
-For a single CSV with group labels, pass its path with `--group-col`,
-`--value-col`, `--group-a`, and `--group-b`.
+For a single experiment CSV, pass its path with `--unit-col`,
+`--assignment-col`, `--control`, and `--treatment`. Separate control and
+treatment CSVs are also supported; the CLI synthesizes the assignment column
+from the file role:
+
+```bash
+uv run twosample-means experiment \
+  --csv-a data/control.csv --csv-b data/treatment.csv \
+  --unit-col user_id --assignment-col variant \
+  --control control --treatment treatment \
+  --metric orders=orders:count:primary \
+  --metric revenue_per_order=revenue/orders:ratio:secondary \
+  --unit-type user --output artifacts/separate-arms
+```
+
+Count metrics estimate unit-level mean counts with Welch inference. Ratio
+metrics use `NUMERATOR/DENOMINATOR` columns and a user-level delta-method
+ratio of means; denominators must be positive. Use `--unit-type aggregate` for
+campaign/day or other pre-aggregated rows. The report will show a warning and
+will not imply user-level causal validity. `--unit-type unknown` records an
+explicit warning when the row semantics are not known.
+
+For the legacy `analyze` command, missing values fail by default. Pass
+`--missing-values exclude` to remove NaNs independently from each arm before
+running the battery; infinite values remain invalid. For a single legacy CSV
+with group labels, pass `--group-col`, `--value-col`, `--group-a`, and
+`--group-b`.
 
 The CLI defaults to a scalable analytical run and skips Bayesian and
 resampling methods. Use `--include-bayesian`, `--include-resampling`, or
@@ -157,7 +190,10 @@ write_experiment_report(experiment_result, "artifacts/checkout-copy")
 ```
 
 Assignment diagnostics report unit duplication, cross-arm assignment, missing
-or unknown labels, arm counts, and an optional sample-ratio mismatch p-value
+or unknown labels, arm counts, and an optional sample-ratio mismatch p-value.
+They also record the declared `unit_type`; aggregate and unknown unit types
+produce explicit warnings because row-level standard errors do not establish
+individual-user causal validity.
 when `expected_allocation` is configured. Normalization validates one row per
 unit, assignment labels, metric types,
 missingness, optional analysis windows, and computes a deterministic data

@@ -19,10 +19,12 @@ from dataclasses import dataclass
 from math import isfinite
 from numbers import Integral
 from pathlib import Path
+from typing import Literal
 
 import numpy.typing as npt
 
 SampleSource = str | Path | npt.ArrayLike | None
+MissingValuePolicy = Literal["error", "exclude"]
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,10 @@ class RunConfig:
         Random seed for all stochastic methods (permutation, bootstrap,
         MCMC). Fixed default ensures reproducibility — a core
         auditability requirement.
+    missing_values:
+        How legacy numeric samples handle missing values. ``"error"``
+        preserves the strict default; ``"exclude"`` removes NaN values
+        before analysis while continuing to reject infinite values.
     population_variance_a:
         Known population variance for sample A, required only by the
         z-test. ``None`` means unknown; the z-test will raise an
@@ -125,6 +131,7 @@ class RunConfig:
     permutation_iterations: int = 9999
     bootstrap_iterations: int = 9999
     seed: int = 42
+    missing_values: MissingValuePolicy = "error"
     population_variance_a: float | None = None
     population_variance_b: float | None = None
     bayes_factor_prior_width: float = 0.707
@@ -202,6 +209,11 @@ class RunConfig:
             raise ValueError(f"seed must be an integer, got {self.seed}")
         if self.seed < 0:
             raise ValueError(f"seed must be non-negative, got {self.seed}")
+        if self.missing_values not in ("error", "exclude"):
+            raise ValueError(
+                "missing_values must be 'error' or 'exclude', "
+                f"got {self.missing_values!r}"
+            )
         if self.mcmc_draws < 100:
             raise ValueError(
                 f"mcmc_draws must be >= 100, got {self.mcmc_draws}"
@@ -252,6 +264,9 @@ class InputSpec:
     column_b:
         Column name to read from ``sample_b`` when it is a file path.
         If ``None``, the first numeric column is used.
+    missing_values:
+        Default NaN policy for ``data_io.load``. ``"error"`` is strict;
+        ``"exclude"`` removes NaNs before analysis.
 
     """
 
@@ -259,6 +274,7 @@ class InputSpec:
     sample_b: SampleSource
     column_a: str | None = None
     column_b: str | None = None
+    missing_values: MissingValuePolicy = "error"
 
     def __post_init__(self) -> None:
         """Validate input specification at construction time."""
@@ -275,4 +291,9 @@ class InputSpec:
             raise ValueError(
                 f"column_b must be a str or None, "
                 f"got {type(self.column_b).__name__}"
+            )
+        if self.missing_values not in ("error", "exclude"):
+            raise ValueError(
+                "missing_values must be 'error' or 'exclude', "
+                f"got {self.missing_values!r}"
             )

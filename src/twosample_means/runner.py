@@ -81,11 +81,15 @@ def run(
         Complete report with all test results.
     """
     if isinstance(data, LoadedData):
-        a, b = validate_samples(data.sample_a, data.sample_b)
+        a, b = validate_samples(
+            data.sample_a,
+            data.sample_b,
+            config.missing_values,
+        )
         data_hash = data.data_hash
         source_desc = data.source_description
     else:
-        a, b = validate_samples(*data)
+        a, b = validate_samples(*data, missing_values=config.missing_values)
         a_arr = a
         b_arr = b
         hasher = hashlib.sha256()

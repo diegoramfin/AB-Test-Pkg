@@ -5,12 +5,14 @@ Usage:
     uv run twosample-means experiment CSV_PATH [OPTIONS]
     uv run twosample-means analyze --csv-a GROUP_A.csv \\
         --csv-b GROUP_B.csv [OPTIONS]
-    uv run twosample-means fetch marketing-campaign-ab --output CACHE_DIR
+    uv run twosample-means fetch DATASET_NAME --output CACHE_DIR
 
 The legacy analyze command defaults to scalable analytical methods. Add
 --full-battery to enable Bayesian and resampling methods, or enable them
 individually. The experiment command exposes metric-family multiplicity
-controls for binary and continuous user-level outcomes.
+controls for binary, continuous, count, and ratio outcomes, including
+separate-arm CSV
+ingestion.
 """
 
 from __future__ import annotations
@@ -27,15 +29,25 @@ from twosample_means.ab_testing import (
     ExperimentConfig,
     MetricSpec,
     analyze_experiment,
+    load_separate_experiment_csvs,
 )
 from twosample_means.ab_testing.config import (
     MetricKind,
     MetricRole,
     MultiplicityScope,
+    UnitType,
 )
-from twosample_means.config import InputSpec, RunConfig
+from twosample_means.config import (
+    InputSpec,
+    MissingValuePolicy,
+    RunConfig,
+)
 from twosample_means.data_io import DataValidationError, load
-from twosample_means.kaggle import KaggleFetchError, fetch_dataset
+from twosample_means.kaggle import (
+    DATASETS,
+    KaggleFetchError,
+    fetch_dataset,
+)
 from twosample_means.reporting import (
     render_experiment_markdown,
     render_markdown,
@@ -93,10 +105,11 @@ def _run_legacy_analysis(args: argparse.Namespace) -> int:
         seed=args.seed,
         include_bayesian=args.full_battery or args.include_bayesian,
         include_resampling=args.full_battery or args.include_resampling,
+        missing_values=cast(MissingValuePolicy, args.missing_values),
     )
 
     spec = _build_spec(args)
-    data = load(spec)
+    data = load(spec, missing_values=config.missing_values)
 
     print(
         f"Sample A: n={len(data.sample_a)}, mean={np.mean(data.sample_a):.4f}"
@@ -152,7 +165,7 @@ def _run_experiment(args: argparse.Namespace) -> int:
     """Run the experiment-level API from a user-level CSV file."""
     try:
         config = _build_experiment_config(args)
-        data = pd.read_csv(args.csv, sep=args.delimiter)
+        data = _load_experiment_input(args, config)
         result = analyze_experiment(data, config)
     except (
         DataValidationError,
@@ -200,7 +213,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     fetch_parser.add_argument(
         "dataset",
-        choices=["marketing-campaign-ab"],
+        choices=sorted(DATASETS),
         help="Registered Kaggle dataset to download.",
     )
     fetch_parser.add_argument(
@@ -212,7 +225,7 @@ def _build_parser() -> argparse.ArgumentParser:
     experiment_parser = commands.add_parser(
         "experiment",
         aliases=["analyze-experiment"],
-        help="Analyze declared binary and continuous metrics from a user CSV.",
+        help="Analyze declared metrics from a user-level or aggregate CSV.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Metric syntax: NAME=COLUMN:KIND[:ROLE]. "
@@ -222,7 +235,18 @@ def _build_parser() -> argparse.ArgumentParser:
     experiment_parser.add_argument(
         "csv",
         type=Path,
+        nargs="?",
         help="CSV containing one row per randomization unit.",
+    )
+    experiment_parser.add_argument(
+        "--csv-a",
+        type=Path,
+        help="Separate control-arm CSV (alternative to positional CSV).",
+    )
+    experiment_parser.add_argument(
+        "--csv-b",
+        type=Path,
+        help="Separate treatment-arm CSV (requires --csv-a).",
     )
     experiment_parser.add_argument(
         "--unit-col",
@@ -251,8 +275,8 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="NAME=COLUMN:KIND[:ROLE]",
         help=(
             "Metric declaration; repeat for each metric. KIND is binary, "
-            "continuous, or count; ROLE defaults to secondary. Ratio metrics "
-            "are configured through the Python API."
+            "continuous, count, or ratio; ROLE defaults to secondary. Ratio "
+            "syntax is NAME=NUMERATOR/DENOMINATOR:ratio[:ROLE]."
         ),
     )
     experiment_parser.add_argument(
@@ -278,6 +302,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Correct within metric families or globally across all metrics "
             "(default: family)."
+        ),
+    )
+    experiment_parser.add_argument(
+        "--unit-type",
+        choices=["user", "aggregate", "unknown"],
+        default="user",
+        help=(
+            "Unit semantics for warnings and audit metadata: user, "
+            "aggregate, or unknown (default: user)."
         ),
     )
     experiment_parser.add_argument(
@@ -478,6 +511,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Random seed (default: 42).",
     )
+    parser.add_argument(
+        "--missing-values",
+        choices=["error", "exclude"],
+        default="error",
+        help=(
+            "Legacy NaN handling: fail on missing values or exclude them "
+            "before analysis (default: error)."
+        ),
+    )
 
     return root_parser
 
@@ -486,6 +528,16 @@ def _build_experiment_config(
     args: argparse.Namespace,
 ) -> ExperimentConfig:
     """Build an ExperimentConfig from experiment CLI arguments."""
+    if args.csv is None and (args.csv_a is None or args.csv_b is None):
+        raise ValueError(
+            "provide a positional experiment CSV or both --csv-a and --csv-b"
+        )
+    if args.csv is not None and (
+        args.csv_a is not None or args.csv_b is not None
+    ):
+        raise ValueError(
+            "choose either a positional experiment CSV or --csv-a/--csv-b"
+        )
     family_overrides = _parse_metric_families(args.metric_family)
     metrics = tuple(
         _parse_metric_definition(definition, family_overrides)
@@ -499,7 +551,11 @@ def _build_experiment_config(
             f"metric family configured for undeclared metric(s): {labels}"
         )
     return ExperimentConfig(
-        experiment_id=args.csv.stem,
+        experiment_id=(
+            args.csv.stem
+            if args.csv is not None
+            else f"{args.csv_a.stem}_vs_{args.csv_b.stem}"
+        ),
         unit_id=args.unit_col,
         assignment=args.assignment_col,
         control=args.control,
@@ -508,6 +564,7 @@ def _build_experiment_config(
         alpha=args.alpha,
         multiplicity=args.multiplicity,
         multiplicity_scope=cast(MultiplicityScope, args.multiplicity_scope),
+        unit_type=cast(UnitType, args.unit_type),
         seed=args.seed,
     )
 
@@ -537,12 +594,57 @@ def _parse_metric_definition(
         MetricRole,
         parts[2].strip() if len(parts) == 3 else "secondary",
     )
+    if kind == "ratio":
+        ratio_columns = column.split("/")
+        if len(ratio_columns) != 2 or not all(
+            value.strip() for value in ratio_columns
+        ):
+            raise ValueError(
+                "ratio metrics must use "
+                "NAME=NUMERATOR/DENOMINATOR:ratio[:ROLE]"
+            )
+        numerator, denominator = (value.strip() for value in ratio_columns)
+        return MetricSpec(
+            name=name,
+            column=name,
+            kind=kind,
+            role=role,
+            family=family_overrides.get(name, "default"),
+            numerator=numerator,
+            denominator=denominator,
+        )
     return MetricSpec(
         name=name,
         column=column,
         kind=kind,
         role=role,
         family=family_overrides.get(name, "default"),
+    )
+
+
+def _load_experiment_input(
+    args: argparse.Namespace,
+    config: ExperimentConfig,
+) -> pd.DataFrame:
+    """Load one combined CSV or separate control/treatment CSVs."""
+    if args.csv is not None and (
+        args.csv_a is not None or args.csv_b is not None
+    ):
+        raise ValueError(
+            "choose either a positional experiment CSV or --csv-a/--csv-b"
+        )
+    if args.csv is None and (args.csv_a is None or args.csv_b is None):
+        raise ValueError(
+            "provide a positional experiment CSV or both --csv-a and --csv-b"
+        )
+    if args.csv is not None:
+        return pd.read_csv(args.csv, sep=args.delimiter)
+    assert args.csv_a is not None and args.csv_b is not None
+    return load_separate_experiment_csvs(
+        args.csv_a,
+        args.csv_b,
+        config,
+        delimiter=args.delimiter,
     )
 
 

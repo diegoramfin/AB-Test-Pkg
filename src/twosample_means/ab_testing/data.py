@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,65 @@ import pandas as pd
 from twosample_means.data_io import DataValidationError
 
 from .config import ExperimentConfig, MetricSpec
+
+
+def load_separate_experiment_csvs(
+    control_path: str | Path,
+    treatment_path: str | Path,
+    config: ExperimentConfig,
+    *,
+    delimiter: str = ",",
+) -> pd.DataFrame:
+    """Load separate control and treatment CSVs into the experiment contract.
+
+    Each file must contain the configured unit and metric input columns. The
+    assignment column is synthesized from the file role, so separate-arm
+    files do not need to carry an assignment label. If they do, existing
+    labels must agree with the declared arm rather than being silently
+    overwritten.
+    """
+    if len(config.treatments) != 1:
+        raise DataValidationError(
+            "separate control/treatment CSV ingestion requires exactly one "
+            "treatment arm"
+        )
+    control = _read_arm_csv(control_path, config, config.control, delimiter)
+    treatment = _read_arm_csv(
+        treatment_path,
+        config,
+        config.treatments[0],
+        delimiter,
+    )
+    return pd.concat((control, treatment), ignore_index=True, sort=False)
+
+
+def _read_arm_csv(
+    path: str | Path,
+    config: ExperimentConfig,
+    arm_label: str,
+    delimiter: str,
+) -> pd.DataFrame:
+    """Read one separate-arm CSV and attach its declared assignment label."""
+    frame = pd.read_csv(path, sep=delimiter)
+    required = {config.unit_id}
+    for metric in config.metrics:
+        required.update(_metric_input_columns(metric))
+    if config.time_column is not None:
+        required.add(config.time_column)
+    missing = sorted(required.difference(frame.columns))
+    if missing:
+        raise DataValidationError(
+            f"{path}: missing required columns: {missing}"
+        )
+    if config.assignment in frame.columns:
+        observed = frame[config.assignment].dropna()
+        if not observed.eq(arm_label).all():
+            raise DataValidationError(
+                f"{path}: existing assignment values do not match "
+                f"declared arm {arm_label!r}"
+            )
+    frame[config.assignment] = arm_label
+    return frame
 
 
 @dataclass(frozen=True)

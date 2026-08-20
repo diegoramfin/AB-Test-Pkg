@@ -2,7 +2,7 @@
 
 The existing ``twosample_means`` functions remain available for low-level
 continuous two-sample analysis. This namespace adds a typed experiment
-boundary for two-arm binary and continuous metric analyses.
+boundary for binary, continuous, count, and ratio metric analyses.
 """
 
 from .api import analyze_experiment
@@ -12,6 +12,7 @@ from .config import (
     ExperimentConfig,
     MetricSpec,
     MultiplicityScope,
+    UnitType,
 )
 from .continuous import (
     ContinuousMetricResult,
@@ -19,7 +20,11 @@ from .continuous import (
     estimate_continuous_metric,
 )
 from .count import estimate_count_metric
-from .data import NormalizedExperimentData, normalize_experiment_data
+from .data import (
+    NormalizedExperimentData,
+    load_separate_experiment_csvs,
+    normalize_experiment_data,
+)
 from .diagnostics import AssignmentDiagnostics, diagnose_assignment
 from .multiplicity import (
     adjust_p_values,
@@ -55,6 +60,7 @@ __all__ = [
     "ExperimentConfig",
     "MetricSpec",
     "MultiplicityScope",
+    "UnitType",
     "estimate_binary_metric",
     "estimate_count_metric",
     "estimate_ratio_metric",
@@ -70,4 +76,5 @@ __all__ = [
     "estimate_continuous_metric",
     "NormalizedExperimentData",
     "normalize_experiment_data",
+    "load_separate_experiment_csvs",
 ]

@@ -2,6 +2,16 @@
 
 All notable changes to `twosample-means` are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Explicit experiment `unit_type` semantics with aggregate/unknown warnings.
+- Separate control/treatment CSV ingestion for experiment analyses.
+- CLI count and ratio metric declarations.
+- Configurable legacy NaN exclusion with strict error defaults.
+- Kaggle dataset manifests and an additional landing-page A/B registry entry.
+
 ## [0.2.0] - 2026-08-19
 
 ### Added

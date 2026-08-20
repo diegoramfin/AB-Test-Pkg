@@ -25,7 +25,11 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from twosample_means.config import InputSpec, SampleSource
+from twosample_means.config import (
+    InputSpec,
+    MissingValuePolicy,
+    SampleSource,
+)
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -57,7 +61,11 @@ class LoadedData:
     source_description: str
 
 
-def validate_array(source: object, label: str) -> FloatArray:
+def validate_array(
+    source: object,
+    label: str,
+    missing_values: MissingValuePolicy = "error",
+) -> FloatArray:
     """Coerce and validate one sample for public analysis APIs.
 
     Raises ``DataValidationError`` rather than leaking NumPy conversion or
@@ -69,21 +77,26 @@ def validate_array(source: object, label: str) -> FloatArray:
         raise DataValidationError(
             f"{label}: data must be a one-dimensional numeric array."
         ) from error
-    _validate_array(array, label)
+    array = _validate_array(array, label, missing_values)
     return np.ascontiguousarray(array, dtype=np.float64)
 
 
 def validate_samples(
-    sample_a: object, sample_b: object
+    sample_a: object,
+    sample_b: object,
+    missing_values: MissingValuePolicy = "error",
 ) -> tuple[FloatArray, FloatArray]:
     """Validate and normalize both samples for a direct ``run`` call."""
     return (
-        validate_array(sample_a, "sample_a"),
-        validate_array(sample_b, "sample_b"),
+        validate_array(sample_a, "sample_a", missing_values),
+        validate_array(sample_b, "sample_b", missing_values),
     )
 
 
-def load(spec: InputSpec) -> LoadedData:
+def load(
+    spec: InputSpec,
+    missing_values: MissingValuePolicy | None = None,
+) -> LoadedData:
     """Load and validate two samples from an ``InputSpec``.
 
     Accepts either file paths (CSV or parquet) or in-memory
@@ -110,8 +123,13 @@ def load(spec: InputSpec) -> LoadedData:
         If a file path does not exist.
 
     """
-    sample_a, desc_a = _load_single(spec.sample_a, spec.column_a, "sample_a")
-    sample_b, desc_b = _load_single(spec.sample_b, spec.column_b, "sample_b")
+    policy = spec.missing_values if missing_values is None else missing_values
+    sample_a, desc_a = _load_single(
+        spec.sample_a, spec.column_a, "sample_a", policy
+    )
+    sample_b, desc_b = _load_single(
+        spec.sample_b, spec.column_b, "sample_b", policy
+    )
     combined_hash = _compute_hash(spec)
     description = f"A: {desc_a} | B: {desc_b}"
     return LoadedData(
@@ -126,6 +144,7 @@ def _load_single(
     source: SampleSource,
     column: str | None,
     label: str,
+    missing_values: MissingValuePolicy,
 ) -> tuple[FloatArray, str]:
     """Load a single sample from a file or in-memory array.
 
@@ -162,10 +181,10 @@ def _load_single(
                 f"'{suffix}'. Use .csv or .parquet."
             )
     else:
-        array = validate_array(source, label)
+        array = validate_array(source, label, missing_values)
         desc = f"in-memory array ({len(array)} values)"
         return array, desc
-    _validate_array(array, label)
+    array = _validate_array(array, label, missing_values)
     return np.ascontiguousarray(array, dtype=np.float64), desc
 
 
@@ -289,7 +308,11 @@ def _first_numeric_column(
     )
 
 
-def _validate_array(array: FloatArray, label: str) -> None:
+def _validate_array(
+    array: FloatArray,
+    label: str,
+    missing_values: MissingValuePolicy = "error",
+) -> FloatArray:
     """Validate that an array meets minimum quality criteria.
 
     Parameters
@@ -314,6 +337,13 @@ def _validate_array(array: FloatArray, label: str) -> None:
         )
     if not np.issubdtype(array.dtype, np.floating):
         raise DataValidationError(f"{label}: data is not numeric.")
+    if missing_values not in ("error", "exclude"):
+        raise ValueError(
+            "missing_values must be 'error' or 'exclude', "
+            f"got {missing_values!r}"
+        )
+    if missing_values == "exclude" and np.isnan(array).any():
+        array = array[~np.isnan(array)]
     if not np.all(np.isfinite(array)):
         non_finite = np.sum(~np.isfinite(array))
         raise DataValidationError(
@@ -322,8 +352,10 @@ def _validate_array(array: FloatArray, label: str) -> None:
         )
     if array.size < 2:
         raise DataValidationError(
-            f"{label}: need at least 2 observations, got {array.size}."
+            f"{label}: need at least 2 observations after missing-value "
+            f"handling, got {array.size}."
         )
+    return array
 
 
 def _compute_hash(spec: InputSpec) -> str:
