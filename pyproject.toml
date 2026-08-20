@@ -59,7 +59,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/twosample_means"]
-include = ["src/twosample_means/schemas/*.json"]
+include = [
+    "src/twosample_means/schemas/*.json",
+    "src/twosample_means/py.typed",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [

@@ -52,6 +52,7 @@ def run(output: str | Path) -> Path:
         assignment="variant",
         control="control",
         treatments=("treatment",),
+        expected_allocation={"control": 0.5, "treatment": 0.5},
         metrics=(
             MetricSpec(
                 "orders",

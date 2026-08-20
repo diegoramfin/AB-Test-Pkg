@@ -7,6 +7,7 @@ entry points against temporary directories so broken examples fail CI.
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -22,6 +23,7 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
         "02_continuous_cuped",
         "03_count_ratio",
         "04_planning_power_sequential",
+        "05_clustered_ratio",
     ],
 )
 def test_example_runs_to_completion(
@@ -46,4 +48,12 @@ def test_example_runs_to_completion(
         assert (output / "report.md").exists()
         assert (output / "report.json").exists()
         assert (output / "report.html").exists()
+        # Every experiment example declares an expected allocation, so the
+        # sample-ratio mismatch test must be evaluated, not skipped.
+        diagnostics = json.loads(
+            (output / "report.json").read_text(encoding="utf-8")
+        )["assignment_diagnostics"]
+        assert diagnostics["sample_ratio_mismatch_evaluated"] is True
+        assert diagnostics["sample_ratio_mismatch_p_value"] is not None
+        assert "not evaluated" not in " ".join(diagnostics["warnings"])
     assert capsys.readouterr().out != ""

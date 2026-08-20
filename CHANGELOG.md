@@ -18,6 +18,15 @@ All notable changes to `twosample-means` are documented here.
   `--covariate` support.
 - Cluster-robust standard errors for continuous and count metrics with CLI
   `--cluster` support.
+- Cluster-robust ratio metrics via the delta method: arm ratio influence
+  values with cluster-sandwich variances combined in quadrature and `G-2`
+  degrees of freedom.
+- Store-clustered revenue-per-order example (`examples/05_clustered_ratio.py`)
+  demonstrating cluster-robust ratio inference.
+- Seeded coverage simulation for cluster-robust ratio intervals: near-nominal
+  coverage on clustered data while the naive user-level interval undercovers.
+- PEP 561 `py.typed` marker shipped in the wheel and sdist so consumers get
+  static type information from the installed package.
 - Correlation-aware group-sequential boundary calibration replacing
   marginal normal quantiles.
 - Self-contained HTML experiment reports.

@@ -63,6 +63,9 @@ class RatioMetricResult:
     simultaneous_ci_level: float | None = None
     simultaneous_ci_method: str | None = None
     contrast_name: str | None = None
+    cluster_robust: bool = False
+    clusters: int | None = None
+    naive_standard_error: float | None = None
 
 
 def estimate_ratio_metric(

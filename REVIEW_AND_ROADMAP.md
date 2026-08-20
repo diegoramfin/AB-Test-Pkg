@@ -272,7 +272,11 @@ which are sensitivity analyses.
   never average row-level ratios by default.
 - Quantile: bootstrap interval for median or selected quantiles.
 - Clustered/repeated observations: cluster-robust standard errors at the
-  randomization unit.
+  randomization unit. Status: implemented for continuous, count, and ratio
+  metrics (CR1 sandwich, small-sample correction, `G-2` degrees of
+  freedom, CLI `--cluster`). Ratio inference runs the delta-method
+  influence values through a per-arm cluster sandwich combined in
+  quadrature; two clusters per arm are required.
 
 ### Multiple testing
 
@@ -436,31 +440,24 @@ Notebook execution dependencies were deliberately removed from the package,
 so examples are Python scripts under `examples/` that write to an ignored
 artifacts directory.
 
-Planned additions mirror the original notebook list:
+Delivered scripts (each smoke-tested in CI and writing to an ignored
+`artifacts/` directory):
 
-1. `01_binary_conversion_ab.ipynb`
-   - Synthetic and marketing conversion examples.
-   - Allocation check, conversion lift, interval, power/precision, and
-     practical significance.
-2. `02_continuous_metric_ab.ipynb`
-   - Existing two-sample engine with Welch as primary and robustness
-     checks labeled as sensitivity analyses.
-3. `03_ratio_metric.ipynb`
-   - Revenue per user or clicks per session using numerator/denominator
-     semantics and delta-method inference.
-4. `04_cuped_variance_reduction.ipynb`
-   - Simulated pre-period covariate, before/after standard error, and
-     leakage guard.
-5. `05_multiple_metrics.ipynb`
-   - Primary/secondary/guardrail metrics with Holm and BH comparisons.
-6. `06_difference_in_differences.ipynb`
-   - Synthetic panel with parallel-trends and event-study diagnostics.
-7. `07_kaggle_dataset_adapter.ipynb`
-   - Optional local-cache workflow; no credentials or network requirement
-     for the committed notebook.
+1. `examples/01_binary_conversion.py` — two-arm conversion experiment with
+   expected-allocation SRM, Holm correction, and practical significance.
+2. `examples/02_continuous_cuped.py` — continuous revenue with CUPED
+   variance reduction and pre-period covariate.
+3. `examples/03_count_ratio.py` — count and ratio metrics in one experiment.
+4. `examples/04_planning_power_sequential.py` — simulation power/MDE and
+   calibrated group-sequential boundaries.
+5. `examples/05_clustered_ratio.py` — store-clustered revenue-per-order
+   ratio with cluster-robust delta-method inference.
 
-Every notebook should have a lightweight parameter set for CI and should
-write outputs to an ignored `artifacts/` directory.
+Still planned as scripts in the same style:
+
+6. Difference-in-differences with parallel-trends and event-study
+   diagnostics (depends on the `quasi_experimental` namespace).
+7. Kaggle local-cache adapter workflow using the dataset manifests.
 
 ## Recommended project layout
 

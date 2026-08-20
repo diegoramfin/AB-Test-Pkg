@@ -126,11 +126,12 @@ uv run twosample-means experiment data/checkout.csv \
   --covariate revenue=pre_period_spend
 ```
 
-Cluster-robust standard errors are available through `--cluster COLUMN`:
+Cluster-robust standard errors are available through `--cluster COLUMN` for
+continuous, count, and ratio metrics:
 
 ```bash
 uv run twosample-means experiment data/checkout.csv \
-  ... --metric revenue=revenue:continuous:primary \
+  ... --metric arpu=revenue/orders:ratio:primary \
   --cluster store_id
 ```
 
@@ -256,10 +257,13 @@ nominal `ci_lower`/`ci_upper` fields remain available alongside
   variance reduction percentage. CUPED assumes the covariate is measured
   before treatment — the caller declares and verifies that.
 - `ExperimentConfig(cluster="cluster_column")` enables cluster-robust
-  (Liang & Zeger, 1986) standard errors for continuous and count metrics.
-  The CR1 sandwich with a small-sample correction and `G-2` degrees of
-  freedom replaces Welch inference; clusters spanning both arms produce an
-  explicit warning. CUPED adjustment and clustering compose.
+  (Liang & Zeger, 1986) standard errors for continuous, count, and ratio
+  metrics. The CR1 sandwich with a small-sample correction and `G-2`
+  degrees of freedom replaces Welch inference; clusters spanning both arms
+  produce an explicit warning. CUPED adjustment and clustering compose.
+  Ratio metrics use the same influence-function delta method as the
+  user-level estimator, with a cluster sandwich over the arm influence
+  values combined in quadrature.
 - `ContrastSpec` declares named treatment-vs-control or arbitrary arm
   contrasts for multi-arm experiments. Unspecified multi-arm analyses are
   rejected rather than silently generating comparisons.
@@ -291,6 +295,8 @@ uv run python examples/01_binary_conversion.py artifacts/examples/conversion
 - `03_count_ratio.py` — count and ratio metrics in one experiment.
 - `04_planning_power_sequential.py` — simulation power/MDE and calibrated
   sequential looks.
+- `05_clustered_ratio.py` — store-clustered revenue-per-order ratio with
+  cluster-robust delta-method inference.
 
 Experiment JSON reports use the bundled `experiment-result-v1` JSON Schema.
 The schema is versioned independently from the Python package release.
