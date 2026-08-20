@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use twosample-means in research or an analysis workflow, please cite this software."
+title: "twosample-means: Auditable two-sample and A/B experiment analysis"
+version: 0.2.0
+date-released: 2026-08-19
+authors:
+  - family-names: Ramirez
+    given-names: Diego
+    affiliation: Independent researcher
+repository-code: "https://github.com/diegoramfin/AB-Test-Pkg"
+license: MIT
+keywords:
+  - A/B testing
+  - experimental design
+  - confidence intervals
+  - multiplicity correction
+  - statistical analysis

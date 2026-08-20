@@ -5,13 +5,16 @@ import pytest
 from scipy import stats as scipy_stats
 
 from twosample_means.config import RunConfig
-from twosample_means.frequentist_nonparametric import (BootstrapResult,
-                                                       NonParametricResult,
-                                                       PermutationResult,
-                                                       bootstrap_ci,
-                                                       brunner_munzel,
-                                                       mann_whitney_u,
-                                                       permutation_test)
+from twosample_means.frequentist_nonparametric import (
+    BootstrapResult,
+    NonParametricResult,
+    PermutationResult,
+    ResourceLimitError,
+    bootstrap_ci,
+    brunner_munzel,
+    mann_whitney_u,
+    permutation_test,
+)
 
 
 @pytest.fixture
@@ -151,3 +154,42 @@ class TestBootstrap:
         config = RunConfig(bootstrap_iterations=200, ci_level=0.90)
         result = bootstrap_ci(a, b, config)
         assert result.ci_level == 0.90
+
+
+class TestResamplingLimits:
+    """Resource limits prevent accidental multi-billion-operation runs."""
+
+    def test_permutation_budget_is_enforced(self) -> None:
+        """Monte Carlo permutation checks its operation budget."""
+        a = np.arange(11, dtype=float)
+        b = np.arange(11, 22, dtype=float)
+        config = RunConfig(
+            permutation_iterations=100,
+            max_resampling_operations=100,
+        )
+        with pytest.raises(ResourceLimitError, match="operation budget"):
+            permutation_test(a, b, config)
+
+    def test_bootstrap_budget_is_enforced(self) -> None:
+        """Bootstrap checks its operation budget before allocating work."""
+        a = np.arange(11, dtype=float)
+        b = np.arange(11, 22, dtype=float)
+        config = RunConfig(
+            bootstrap_iterations=100,
+            max_resampling_operations=100,
+        )
+        with pytest.raises(ResourceLimitError, match="operation budget"):
+            bootstrap_ci(a, b, config)
+
+
+class TestPermutationEdgeCases:
+    """Edge cases for the permutation test."""
+
+    def test_exact_p_value_no_pseudo_count(self) -> None:
+        """Exact permutation uses count/total, not (count+1)/(total+1)."""
+        a = np.array([1.0, 2.0])
+        b = np.array([10.0, 11.0])
+        config = RunConfig()
+        result = permutation_test(a, b, config)
+        assert result.mode == "exact"
+        assert result.p_value == pytest.approx(2.0 / 6.0)

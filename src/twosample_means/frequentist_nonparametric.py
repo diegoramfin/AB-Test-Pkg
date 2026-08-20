@@ -20,13 +20,19 @@ Academic rationale
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 
 import numpy as np
+import numpy.typing as npt
 from scipy import stats
 
 from twosample_means.citations import Citation, get_citation
 from twosample_means.config import RunConfig
+
+
+class ResourceLimitError(ValueError):
+    """Raised when a resampling request exceeds its configured budget."""
 
 
 @dataclass(frozen=True)
@@ -123,7 +129,7 @@ class BootstrapResult:
 
 
 def mann_whitney_u(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
+    a: npt.NDArray[np.float64], b: npt.NDArray[np.float64], config: RunConfig
 ) -> NonParametricResult:
     """Perform the Mann-Whitney U test.
 
@@ -163,7 +169,7 @@ def mann_whitney_u(
 
 
 def brunner_munzel(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
+    a: npt.NDArray[np.float64], b: npt.NDArray[np.float64], config: RunConfig
 ) -> NonParametricResult:
     """Perform the Brunner-Munzel test.
 
@@ -203,13 +209,14 @@ def brunner_munzel(
         statistic=float(-result.statistic),
         p_value=float(result.pvalue),
         assumption_notes=(
-            "Assumes independence. Does not assume " "normality or equal variances."
+            "Assumes independence. Does not assume "
+            "normality or equal variances."
         ),
     )
 
 
 def permutation_test(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
+    a: npt.NDArray[np.float64], b: npt.NDArray[np.float64], config: RunConfig
 ) -> PermutationResult:
     """Perform a permutation test for the mean difference.
 
@@ -243,6 +250,12 @@ def permutation_test(
     n_total = len(combined)
     if n_total <= 20:
         return _permutation_exact(combined, n_a, observed_diff, cite)
+    operations = config.permutation_iterations * n_total
+    if operations > config.max_resampling_operations:
+        raise ResourceLimitError(
+            "permutation test exceeds the configured operation budget: "
+            f"{operations} > {config.max_resampling_operations}"
+        )
     return _permutation_montecarlo(
         combined,
         n_a,
@@ -253,7 +266,9 @@ def permutation_test(
     )
 
 
-def bootstrap_ci(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BootstrapResult:
+def bootstrap_ci(
+    a: npt.NDArray[np.float64], b: npt.NDArray[np.float64], config: RunConfig
+) -> BootstrapResult:
     """Compute a bootstrap CI for the mean difference.
 
     Resamples each group with replacement and computes the percentile
@@ -281,6 +296,12 @@ def bootstrap_ci(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BootstrapRe
         The point estimate, CI bounds, iterations, and seed.
     """
     cite = get_citation("bootstrap_ci")
+    operations = config.bootstrap_iterations * (len(a) + len(b))
+    if operations > config.max_resampling_operations:
+        raise ResourceLimitError(
+            "bootstrap CI exceeds the configured operation budget: "
+            f"{operations} > {config.max_resampling_operations}"
+        )
     rng = np.random.default_rng(config.seed)
     n_a = len(a)
     n_b = len(b)
@@ -305,7 +326,7 @@ def bootstrap_ci(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BootstrapRe
 
 
 def _permutation_exact(
-    combined: np.ndarray,
+    combined: npt.NDArray[np.float64],
     n_a: int,
     observed_diff: float,
     cite: Citation,
@@ -328,20 +349,19 @@ def _permutation_exact(
     PermutationResult
         Exact test result.
     """
-    from itertools import combinations
 
     n_total = len(combined)
     indices = range(n_total)
     count_extreme = 0
     total_perms = 0
-    for combo in combinations(indices, n_a):
+    for combo in itertools.combinations(indices, n_a):
         mask = np.zeros(n_total, dtype=bool)
         mask[list(combo)] = True
         perm_diff = np.mean(combined[mask]) - np.mean(combined[~mask])
         if abs(perm_diff) >= abs(observed_diff):
             count_extreme += 1
         total_perms += 1
-    p_value = (count_extreme + 1) / (total_perms + 1)
+    p_value = count_extreme / total_perms
     return PermutationResult(
         method_name="Permutation test (exact)",
         citation=_fmt(cite),
@@ -350,12 +370,14 @@ def _permutation_exact(
         mode="exact",
         iterations=total_perms,
         seed=None,
-        assumption_notes=("Assumes independence and exchangeability under the null."),
+        assumption_notes=(
+            "Assumes independence and exchangeability under the null."
+        ),
     )
 
 
 def _permutation_montecarlo(
-    combined: np.ndarray,
+    combined: npt.NDArray[np.float64],
     n_a: int,
     observed_diff: float,
     iterations: int,
@@ -403,12 +425,15 @@ def _permutation_montecarlo(
         mode="monte_carlo",
         iterations=iterations,
         seed=seed,
-        assumption_notes=("Assumes independence and exchangeability under the null."),
+        assumption_notes=(
+            "Assumes independence and exchangeability under the null."
+        ),
     )
 
 
 def _fmt(cite: Citation) -> str:
     """Format a citation as a readable string."""
     return (
-        f"{cite['authors']} ({cite['year']}). " + f"{cite['title']}. {cite['source']}."
+        f"{cite['authors']} ({cite['year']}). "
+        + f"{cite['title']}. {cite['source']}."
     )

@@ -54,6 +54,19 @@ class TestBayesFactor:
         assert "Rouder" in result.citation
 
 
+class TestBayesianEdgeCases:
+    """Degenerate data fails with a domain-specific error."""
+
+    def test_constant_data_rejected(self, config: RunConfig) -> None:
+        """Bayesian methods do not construct invalid zero-scale priors."""
+        a = np.ones(4)
+        b = np.ones(4)
+        with pytest.raises(ValueError, match="zero variance"):
+            best(a, b, config)
+        with pytest.raises(ValueError, match="zero variance"):
+            bayes_factor_jzs(a, b, config)
+
+
 class TestBEST:
     """Tests for the BEST Bayesian t-test."""
 

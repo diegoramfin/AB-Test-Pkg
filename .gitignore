@@ -8,3 +8,15 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Generated verification and analysis outputs
+.coverage
+.coverage.*
+output/
+notebooks/output/
+artifacts/
+data/cache/
+.devin/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache

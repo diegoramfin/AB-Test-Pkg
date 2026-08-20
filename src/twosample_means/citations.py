@@ -8,7 +8,7 @@ core auditability and anti-p-hacking requirement.
 
 The citations are drawn from peer-reviewed statistics literature and
 established reference texts. Where a method is accessed via a library
-(scipy, statsmodels, PyMC, pingouin), the citation is the original
+(scipy, PyMC, pingouin), the citation is the original
 academic source for the method, not the library documentation.
 """
 

@@ -13,14 +13,20 @@ Academic rationale
   without dichotomous decisions.
 - JZS Bayes factor (Rouder et al., 2009): the Jeffreys-Zellner-Siow
   prior on the effect size yields a Bayes factor that quantifies the
-  relative evidence for H₀ vs H₁. Implemented via pingouin.
+  relative evidence for H₀ vs H₁. Implemented via pingouin. The
+  standard JZS model assumes equal population variances.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+import arviz as az
 import numpy as np
+import numpy.typing as npt
+import pingouin as pg
+import pymc as pm
+from scipy import stats
 
 from twosample_means.citations import Citation, get_citation
 from twosample_means.config import RunConfig
@@ -60,6 +66,7 @@ class BESTResult:
         Random seed used.
     assumption_notes:
         Human-readable notes on assumptions.
+
     """
 
     method_name: str
@@ -96,6 +103,7 @@ class BayesFactorResult:
         The prior width (r scale) used.
     assumption_notes:
         Human-readable notes on assumptions.
+
     """
 
     method_name: str
@@ -106,7 +114,11 @@ class BayesFactorResult:
     assumption_notes: str
 
 
-def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
+def best(
+    a: npt.NDArray[np.float64],
+    b: npt.NDArray[np.float64],
+    config: RunConfig,
+) -> BESTResult:
     """Perform the BEST Bayesian t-test (Kruschke, 2013).
 
     Models each group with a Student-t likelihood and estimates the
@@ -134,14 +146,16 @@ def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
     -------
     BESTResult
         Posterior summaries, HDI, ROPE, MCMC diagnostics.
-    """
-    import arviz as az
-    import pymc as pm
 
+    """
     cite = get_citation("best")
     pooled = np.concatenate([a, b])
     mean_prior = float(np.mean(pooled))
     sd_prior = float(np.std(pooled)) * 5.0
+    if not np.isfinite(sd_prior) or sd_prior <= 0.0:
+        raise ValueError(
+            "BEST is not estimable when pooled data have zero variance"
+        )
 
     with pm.Model():
         mu_a = pm.Normal("mu_a", mu=mean_prior, sigma=sd_prior)
@@ -164,12 +178,20 @@ def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
     flat_samples = mean_diff_samples.flatten()
     posterior_mean_diff = float(np.mean(flat_samples))
 
-    hdi = az.hdi(flat_samples, hdi_prob=config.hdi_mass)  # type: ignore[no-untyped-call]
+    hdi = az.hdi(  # type: ignore[no-untyped-call]
+        flat_samples, hdi_prob=config.hdi_mass
+    )
     hdi_arr = np.asarray(hdi).flatten()
     hdi_lo = float(hdi_arr[0])
     hdi_hi = float(hdi_arr[1])
 
-    pooled_sd = float(np.std(pooled, ddof=1))
+    n_a = len(a)
+    n_b = len(b)
+    sd_a = float(np.std(a, ddof=1))
+    sd_b = float(np.std(b, ddof=1))
+    pooled_sd = float(
+        np.sqrt(((n_a - 1) * sd_a**2 + (n_b - 1) * sd_b**2) / (n_a + n_b - 2))
+    )
     if config.rope_scale == "auto":
         effective_rope = config.rope_width * pooled_sd
     else:
@@ -222,7 +244,9 @@ def best(a: np.ndarray, b: np.ndarray, config: RunConfig) -> BESTResult:
 
 
 def bayes_factor_jzs(
-    a: np.ndarray, b: np.ndarray, config: RunConfig
+    a: npt.NDArray[np.float64],
+    b: npt.NDArray[np.float64],
+    config: RunConfig,
 ) -> BayesFactorResult:
     """Compute the JZS Bayes factor for a two-sample t-test.
 
@@ -233,7 +257,8 @@ def bayes_factor_jzs(
 
     Assumptions: The JZS prior is a default, objective prior for the
     effect size. The Bayes factor quantifies the relative evidence
-    for H₁ vs H₀ — it does NOT make a decision.
+    for H₁ vs H₀ — it does NOT make a decision. The standard two-sample
+    JZS model assumes equal population variances.
 
     Parameters
     ----------
@@ -248,11 +273,10 @@ def bayes_factor_jzs(
     -------
     BayesFactorResult
         BF10, BF01, and prior width.
-    """
-    import pingouin as pg
 
+    """
     cite = get_citation("bayes_factor_jzs")
-    t_stat, _p = _t_stat(a, b)
+    t_stat, _p = _students_t_stat(a, b)
     n_a = len(a)
     n_b = len(b)
     bf10 = float(
@@ -272,13 +296,21 @@ def bayes_factor_jzs(
         bf01=bf01,
         prior_width=config.bayes_factor_prior_width,
         assumption_notes=(
-            "JZS prior on effect size. " "Bayes factor quantifies relative evidence."
+            "JZS prior on effect size. "
+            "Bayes factor quantifies relative evidence. "
+            "Assumes equal population variances."
         ),
     )
 
 
-def _t_stat(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
-    """Compute Welch's t-statistic for the Bayes factor input.
+def _students_t_stat(
+    a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]
+) -> tuple[float, float]:
+    """Compute Student's t-statistic for the JZS Bayes factor input.
+
+    The standard JZS two-sample Bayes factor is derived under the
+    equal-variance Student t model, so the pooled-variance t-statistic
+    is used here.
 
     Parameters
     ----------
@@ -289,15 +321,20 @@ def _t_stat(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
     -------
     tuple[float, float]
         t-statistic and p-value.
-    """
-    from scipy import stats
 
-    result = stats.ttest_ind(a, b, equal_var=False)
+    """
+    pooled_variance = (
+        (len(a) - 1) * np.var(a, ddof=1) + (len(b) - 1) * np.var(b, ddof=1)
+    ) / (len(a) + len(b) - 2)
+    if not np.isfinite(pooled_variance) or pooled_variance <= 0.0:
+        raise ValueError("JZS Bayes factor is not estimable for zero variance")
+    result = stats.ttest_ind(a, b, equal_var=True)
     return float(result.statistic), float(result.pvalue)
 
 
 def _fmt(cite: Citation) -> str:
     """Format a citation as a readable string."""
     return (
-        f"{cite['authors']} ({cite['year']}). " + f"{cite['title']}. {cite['source']}."
+        f"{cite['authors']} ({cite['year']}). "
+        f"{cite['title']}. {cite['source']}."
     )

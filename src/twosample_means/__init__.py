@@ -4,8 +4,8 @@ This package implements a procedure for testing the difference in means
 between two independent samples using an exhaustive battery of
 hypothesis tests spanning three paradigms: frequentist parametric,
 frequentist non-parametric, and Bayesian. Every method is a thin wrapper
-over a proven library implementation (scipy, statsmodels, PyMC,
-pingouin) and is backed by an academic citation in the citations
+over a proven library implementation (scipy, PyMC, pingouin) and is
+backed by an academic citation in the citations
 registry.
 
 The procedure is report-only: it computes and returns evidence (test
@@ -14,4 +14,4 @@ confidence intervals, assumption-check outcomes) but NEVER applies an
 accept/reject decision. This is the strongest anti-p-hacking stance.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

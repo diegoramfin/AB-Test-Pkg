@@ -18,15 +18,16 @@ FAIR data principles (Wilkinson et al., 2016).
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
-from twosample_means.config import InputSpec
+from twosample_means.config import InputSpec, SampleSource
+
+FloatArray = npt.NDArray[np.float64]
 
 
 class DataValidationError(ValueError):
@@ -47,12 +48,39 @@ class LoadedData:
         SHA-256 hash of the raw input bytes, for provenance.
     source_description:
         Human-readable description of the data source.
+
     """
 
-    sample_a: np.ndarray
-    sample_b: np.ndarray
+    sample_a: FloatArray
+    sample_b: FloatArray
     data_hash: str
     source_description: str
+
+
+def validate_array(source: object, label: str) -> FloatArray:
+    """Coerce and validate one sample for public analysis APIs.
+
+    Raises ``DataValidationError`` rather than leaking NumPy conversion or
+    shape errors so callers get one stable input-validation boundary.
+    """
+    try:
+        array = np.asarray(source, dtype=float)
+    except (TypeError, ValueError) as error:
+        raise DataValidationError(
+            f"{label}: data must be a one-dimensional numeric array."
+        ) from error
+    _validate_array(array, label)
+    return np.ascontiguousarray(array, dtype=np.float64)
+
+
+def validate_samples(
+    sample_a: object, sample_b: object
+) -> tuple[FloatArray, FloatArray]:
+    """Validate and normalize both samples for a direct ``run`` call."""
+    return (
+        validate_array(sample_a, "sample_a"),
+        validate_array(sample_b, "sample_b"),
+    )
 
 
 def load(spec: InputSpec) -> LoadedData:
@@ -80,6 +108,7 @@ def load(spec: InputSpec) -> LoadedData:
         values, or has fewer than 2 observations per sample.
     FileNotFoundError
         If a file path does not exist.
+
     """
     sample_a, desc_a = _load_single(spec.sample_a, spec.column_a, "sample_a")
     sample_b, desc_b = _load_single(spec.sample_b, spec.column_b, "sample_b")
@@ -94,10 +123,10 @@ def load(spec: InputSpec) -> LoadedData:
 
 
 def _load_single(
-    source: str | Path | Sequence[Any],
+    source: SampleSource,
     column: str | None,
     label: str,
-) -> tuple[np.ndarray, str]:
+) -> tuple[FloatArray, str]:
     """Load a single sample from a file or in-memory array.
 
     Parameters
@@ -112,9 +141,12 @@ def _load_single(
 
     Returns
     -------
-    tuple[np.ndarray, str]
+    tuple[FloatArray, str]
         The validated numeric array and a source description.
+
     """
+    if source is None:
+        raise DataValidationError(f"{label}: source must not be None.")
     if isinstance(source, str | Path):
         path = Path(source)
         if not path.exists():
@@ -130,17 +162,18 @@ def _load_single(
                 f"'{suffix}'. Use .csv or .parquet."
             )
     else:
-        array = np.asarray(source, dtype=float)
+        array = validate_array(source, label)
         desc = f"in-memory array ({len(array)} values)"
+        return array, desc
     _validate_array(array, label)
-    return array, desc
+    return np.ascontiguousarray(array, dtype=np.float64), desc
 
 
 def _load_csv(
     path: Path,
     column: str | None,
     label: str,
-) -> tuple[np.ndarray, str]:
+) -> tuple[FloatArray, str]:
     """Load a numeric column from a CSV file.
 
     Parameters
@@ -154,8 +187,9 @@ def _load_csv(
 
     Returns
     -------
-    tuple[np.ndarray, str]
+    tuple[FloatArray, str]
         The numeric array and a source description.
+
     """
     df = pd.read_csv(path)
     if column is not None:
@@ -164,7 +198,12 @@ def _load_csv(
                 f"{label}: column '{column}' not found in "
                 f"{path}. Available: {list(df.columns)}"
             )
-        values = df[column].to_numpy(dtype=float)
+        try:
+            values = df[column].to_numpy(dtype=float)
+        except (TypeError, ValueError) as error:
+            raise DataValidationError(
+                f"{label}: column '{column}' is not numeric in {path}."
+            ) from error
         desc = f"CSV {path.name} column '{column}'"
     else:
         values = _first_numeric_column(df, label, path.name)
@@ -176,7 +215,7 @@ def _load_parquet(
     path: Path,
     column: str | None,
     label: str,
-) -> tuple[np.ndarray, str]:
+) -> tuple[FloatArray, str]:
     """Load a numeric column from a parquet file.
 
     Parameters
@@ -190,8 +229,9 @@ def _load_parquet(
 
     Returns
     -------
-    tuple[np.ndarray, str]
+    tuple[FloatArray, str]
         The numeric array and a source description.
+
     """
     df = pd.read_parquet(path)
     if column is not None:
@@ -200,7 +240,12 @@ def _load_parquet(
                 f"{label}: column '{column}' not found in "
                 f"{path}. Available: {list(df.columns)}"
             )
-        values = df[column].to_numpy(dtype=float)
+        try:
+            values = df[column].to_numpy(dtype=float)
+        except (TypeError, ValueError) as error:
+            raise DataValidationError(
+                f"{label}: column '{column}' is not numeric in {path}."
+            ) from error
         desc = f"parquet {path.name} column '{column}'"
     else:
         values = _first_numeric_column(df, label, path.name)
@@ -212,7 +257,7 @@ def _first_numeric_column(
     df: pd.DataFrame,
     label: str,
     filename: str,
-) -> np.ndarray:
+) -> FloatArray:
     """Extract the first numeric column from a DataFrame.
 
     Parameters
@@ -226,13 +271,14 @@ def _first_numeric_column(
 
     Returns
     -------
-    np.ndarray
+    FloatArray
         The first numeric column as a float array.
 
     Raises
     ------
     DataValidationError
         If no numeric column is found.
+
     """
     for col in df.columns:
         if df[col].dtype.kind in "iuf":
@@ -243,7 +289,7 @@ def _first_numeric_column(
     )
 
 
-def _validate_array(array: np.ndarray, label: str) -> None:
+def _validate_array(array: FloatArray, label: str) -> None:
     """Validate that an array meets minimum quality criteria.
 
     Parameters
@@ -258,17 +304,21 @@ def _validate_array(array: np.ndarray, label: str) -> None:
     DataValidationError
         If the array is empty, non-numeric, contains non-finite
         values, or has fewer than 2 observations.
+
     """
     if array.size == 0:
         raise DataValidationError(f"{label}: data is empty.")
     if array.ndim != 1:
-        raise DataValidationError(f"{label}: expected 1-D array, got {array.ndim}-D.")
+        raise DataValidationError(
+            f"{label}: expected 1-D array, got {array.ndim}-D."
+        )
     if not np.issubdtype(array.dtype, np.floating):
         raise DataValidationError(f"{label}: data is not numeric.")
     if not np.all(np.isfinite(array)):
         non_finite = np.sum(~np.isfinite(array))
         raise DataValidationError(
-            f"{label}: data contains {non_finite} " "non-finite value(s) (NaN or Inf)."
+            f"{label}: data contains {non_finite} "
+            "non-finite value(s) (NaN or Inf)."
         )
     if array.size < 2:
         raise DataValidationError(
@@ -292,6 +342,7 @@ def _compute_hash(spec: InputSpec) -> str:
     -------
     str
         A hex digest of the SHA-256 hash.
+
     """
     hasher = hashlib.sha256()
     for source, column in (

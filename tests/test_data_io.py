@@ -7,7 +7,12 @@ import pandas as pd
 import pytest
 
 from twosample_means.config import InputSpec
-from twosample_means.data_io import DataValidationError, LoadedData, load
+from twosample_means.data_io import (
+    DataValidationError,
+    LoadedData,
+    load,
+    validate_array,
+)
 
 
 class TestLoadFromArrays:
@@ -59,9 +64,9 @@ class TestLoadFromArrays:
     def test_hash_includes_column_name(self, tmp_path: Path) -> None:
         """Same file, different columns must yield different hashes."""
         csv_path = tmp_path / "data.csv"
-        pd.DataFrame({"control": [1.0, 2.0, 3.0], "treatment": [4.0, 5.0, 6.0]}).to_csv(
-            csv_path, index=False
-        )
+        pd.DataFrame(
+            {"control": [1.0, 2.0, 3.0], "treatment": [4.0, 5.0, 6.0]}
+        ).to_csv(csv_path, index=False)
         spec_ctrl = InputSpec(
             sample_a=csv_path,
             sample_b=csv_path,
@@ -83,9 +88,9 @@ class TestLoadFromCSV:
     def test_loads_csv_with_column(self, tmp_path: Path) -> None:
         """CSV loads with a specified column."""
         csv_path = tmp_path / "data.csv"
-        pd.DataFrame({"group": ["a", "b", "c"], "value": [1.0, 2.0, 3.0]}).to_csv(
-            csv_path, index=False
-        )
+        pd.DataFrame(
+            {"group": ["a", "b", "c"], "value": [1.0, 2.0, 3.0]}
+        ).to_csv(csv_path, index=False)
         spec = InputSpec(
             sample_a=csv_path,
             sample_b=csv_path,
@@ -188,6 +193,16 @@ class TestValidation:
         )
         with pytest.raises(DataValidationError, match="non-finite"):
             load(spec)
+
+    def test_non_numeric_array_raises_data_validation_error(self) -> None:
+        """Non-numeric arrays use the package's stable error type."""
+        with pytest.raises(DataValidationError, match="one-dimensional"):
+            validate_array(["control", "treatment"], "sample_a")
+
+    def test_multidimensional_array_raises_data_validation_error(self) -> None:
+        """Multidimensional arrays are rejected at the validation boundary."""
+        with pytest.raises(DataValidationError, match="1-D"):
+            validate_array([[1.0, 2.0], [3.0, 4.0]], "sample_a")
 
     def test_unsupported_format_raises(self, tmp_path: Path) -> None:
         """Unsupported file format raises DataValidationError."""

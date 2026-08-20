@@ -15,10 +15,14 @@ threshold inside a method to chase a desired result.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
+from math import isfinite
+from numbers import Integral
 from pathlib import Path
-from typing import Any
+
+import numpy.typing as npt
+
+SampleSource = str | Path | npt.ArrayLike | None
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,20 @@ class RunConfig:
         Threshold for the chosen outlier method: for IQR, the
         multiplier (default 1.5 per Tukey 1977); for z-score, the
         absolute z cutoff (default 3.0).
+    include_bayesian:
+        Whether the runner should execute Bayesian methods. Defaults to
+        ``True`` for library compatibility; scalable clients can disable it.
+    include_resampling:
+        Whether permutation and bootstrap methods should run.
+    max_bayesian_observations:
+        Maximum combined sample size allowed for Bayesian methods.
+    max_diagnostic_observations:
+        Maximum sample size for Monte Carlo Anderson-Darling diagnostics.
+    max_pairwise_comparisons:
+        Maximum exact pairwise differences allowed for Hodges-Lehmann.
+    max_resampling_operations:
+        Maximum approximate observation-iterations for resampling methods.
+
     """
 
     alpha: float = 0.05
@@ -112,25 +130,86 @@ class RunConfig:
     bayes_factor_prior_width: float = 0.707
     outlier_method: str = "iqr"
     outlier_threshold: float = 1.5
+    include_bayesian: bool = True
+    include_resampling: bool = True
+    max_bayesian_observations: int = 10_000
+    max_diagnostic_observations: int = 10_000
+    max_pairwise_comparisons: int = 5_000_000
+    max_resampling_operations: int = 10_000_000
 
     def __post_init__(self) -> None:
         """Validate parameter ranges at construction time."""
-        if not 0.0 < self.alpha < 1.0:
-            raise ValueError(f"alpha must be in (0, 1), got {self.alpha}")
-        if not 0.0 < self.ci_level < 1.0:
-            raise ValueError(f"ci_level must be in (0, 1), got {self.ci_level}")
-        if not 0.0 < self.hdi_mass < 1.0:
-            raise ValueError(f"hdi_mass must be in (0, 1), got {self.hdi_mass}")
-        if self.rope_width <= 0.0:
-            raise ValueError(f"rope_width must be positive, got {self.rope_width}")
+        for name, value in (
+            ("alpha", self.alpha),
+            ("ci_level", self.ci_level),
+            ("hdi_mass", self.hdi_mass),
+        ):
+            if not isfinite(value) or not 0.0 < value < 1.0:
+                raise ValueError(f"{name} must be in (0, 1), got {value}")
+        if not isfinite(self.rope_width) or self.rope_width <= 0.0:
+            raise ValueError(
+                f"rope_width must be positive, got {self.rope_width}"
+            )
         if self.rope_scale not in ("auto", "fixed"):
             raise ValueError(
-                f"rope_scale must be 'auto' or 'fixed', " f"got '{self.rope_scale}'"
+                f"rope_scale must be 'auto' or 'fixed', "
+                f"got '{self.rope_scale}'"
             )
+        if self.outlier_method not in ("iqr", "zscore"):
+            raise ValueError(
+                f"outlier_method must be 'iqr' or "
+                f"'zscore', got {self.outlier_method}"
+            )
+        if not isfinite(self.outlier_threshold) or (
+            self.outlier_threshold <= 0.0
+        ):
+            raise ValueError(
+                "outlier_threshold must be positive and finite, "
+                f"got {self.outlier_threshold}"
+            )
+        for name, variance in (
+            ("population_variance_a", self.population_variance_a),
+            ("population_variance_b", self.population_variance_b),
+        ):
+            if variance is not None and (
+                not isfinite(variance) or variance <= 0.0
+            ):
+                raise ValueError(
+                    f"{name} must be positive and finite, got {variance}"
+                )
+        if not isfinite(self.bayes_factor_prior_width) or (
+            self.bayes_factor_prior_width <= 0.0
+        ):
+            raise ValueError(
+                "bayes_factor_prior_width must be positive and finite, "
+                f"got {self.bayes_factor_prior_width}"
+            )
+        for name, value in (
+            ("mcmc_draws", self.mcmc_draws),
+            ("mcmc_chains", self.mcmc_chains),
+            ("permutation_iterations", self.permutation_iterations),
+            ("bootstrap_iterations", self.bootstrap_iterations),
+            ("max_bayesian_observations", self.max_bayesian_observations),
+            ("max_diagnostic_observations", self.max_diagnostic_observations),
+            ("max_pairwise_comparisons", self.max_pairwise_comparisons),
+            ("max_resampling_operations", self.max_resampling_operations),
+        ):
+            if isinstance(value, bool) or not isinstance(value, Integral):
+                raise ValueError(f"{name} must be an integer, got {value}")
+            if value <= 0:
+                raise ValueError(f"{name} must be positive, got {value}")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, Integral):
+            raise ValueError(f"seed must be an integer, got {self.seed}")
+        if self.seed < 0:
+            raise ValueError(f"seed must be non-negative, got {self.seed}")
         if self.mcmc_draws < 100:
-            raise ValueError(f"mcmc_draws must be >= 100, got {self.mcmc_draws}")
+            raise ValueError(
+                f"mcmc_draws must be >= 100, got {self.mcmc_draws}"
+            )
         if self.mcmc_chains < 2:
-            raise ValueError(f"mcmc_chains must be >= 2, got {self.mcmc_chains}")
+            raise ValueError(
+                f"mcmc_chains must be >= 2, got {self.mcmc_chains}"
+            )
         if self.permutation_iterations < 100:
             raise ValueError(
                 "permutation_iterations must be >= 100, "
@@ -141,15 +220,10 @@ class RunConfig:
                 "bootstrap_iterations must be >= 100, "
                 f"got {self.bootstrap_iterations}"
             )
-        if self.outlier_method not in ("iqr", "zscore"):
-            raise ValueError(
-                f"outlier_method must be 'iqr' or "
-                f"'zscore', got {self.outlier_method}"
-            )
-        if self.outlier_threshold <= 0.0:
-            raise ValueError(
-                "outlier_threshold must be positive, " f"got {self.outlier_threshold}"
-            )
+        if not isinstance(self.include_bayesian, bool):
+            raise ValueError("include_bayesian must be a bool")
+        if not isinstance(self.include_resampling, bool):
+            raise ValueError("include_resampling must be a bool")
 
 
 @dataclass(frozen=True)
@@ -178,10 +252,11 @@ class InputSpec:
     column_b:
         Column name to read from ``sample_b`` when it is a file path.
         If ``None``, the first numeric column is used.
+
     """
 
-    sample_a: str | Path | Sequence[Any]
-    sample_b: str | Path | Sequence[Any]
+    sample_a: SampleSource
+    sample_b: SampleSource
     column_a: str | None = None
     column_b: str | None = None
 

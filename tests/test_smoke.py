@@ -19,8 +19,18 @@ import pytest
         "twosample_means.effect_size",
         "twosample_means.report",
         "twosample_means.runner",
+        "twosample_means.ab_testing",
+        "twosample_means.ab_testing.binary",
     ],
 )
 def test_module_importable(module_name: str) -> None:
     """Every declared module must be importable."""
     importlib.import_module(module_name)
+
+
+def test_legacy_report_module_exports_reporting_api() -> None:
+    """The historical report module remains a working compatibility alias."""
+    from twosample_means import report, reporting
+
+    assert report.write_report is reporting.write_report
+    assert report.render_markdown is reporting.render_markdown

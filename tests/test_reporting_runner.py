@@ -7,8 +7,14 @@ import numpy as np
 import pytest
 
 from twosample_means.config import RunConfig
-from twosample_means.reporting import (RunReport, TestResult, render_json,
-                                       render_markdown, write_report)
+from twosample_means.data_io import DataValidationError
+from twosample_means.reporting import (
+    RunReport,
+    TestResult,
+    render_json,
+    render_markdown,
+    write_report,
+)
 
 
 @pytest.fixture
@@ -51,7 +57,9 @@ def sample_report() -> RunReport:
 class TestReporting:
     """Tests for the reporting module."""
 
-    def test_markdown_contains_all_sections(self, sample_report: RunReport) -> None:
+    def test_markdown_contains_all_sections(
+        self, sample_report: RunReport
+    ) -> None:
         """Markdown contains all expected sections."""
         md = render_markdown(sample_report)
         assert "# Two-Sample Mean Difference" in md
@@ -62,13 +70,17 @@ class TestReporting:
         assert "Welch" in md
         assert "Mann-Whitney" in md
 
-    def test_markdown_contains_citations(self, sample_report: RunReport) -> None:
+    def test_markdown_contains_citations(
+        self, sample_report: RunReport
+    ) -> None:
         """Markdown contains citations."""
         md = render_markdown(sample_report)
         assert "Welch (1947)" in md
         assert "Mann & Whitney (1947)" in md
 
-    def test_markdown_contains_no_decision(self, sample_report: RunReport) -> None:
+    def test_markdown_contains_no_decision(
+        self, sample_report: RunReport
+    ) -> None:
         """Markdown states no decision is made."""
         md = render_markdown(sample_report)
         assert "accept/reject" in md.lower()
@@ -81,7 +93,62 @@ class TestReporting:
         assert len(parsed["results"]) == 2
         assert parsed["results"][0]["method_name"] == ("Welch's t-test")
 
-    def test_write_report(self, sample_report: RunReport, tmp_path: Path) -> None:
+    def test_numpy_json_values_are_native_and_nonfinite_values_are_null(
+        self, sample_report: RunReport
+    ) -> None:
+        """JSON handles NumPy scalars and arrays without stringifying them."""
+        report = RunReport(
+            data_hash=sample_report.data_hash,
+            source_description=sample_report.source_description,
+            config={"array": np.array([1.0, np.nan])},
+            results=[
+                TestResult(
+                    method_name="numpy",
+                    category="diagnostic",
+                    citation="citation",
+                    statistic=np.float64(1.5),
+                    p_value=None,
+                    ci_lower=None,
+                    ci_upper=None,
+                    ci_level=None,
+                    extra={"values": np.array([2, np.inf])},
+                )
+            ],
+        )
+
+        parsed = json.loads(render_json(report))
+
+        assert parsed["config"]["array"] == [1.0, None]
+        assert parsed["results"][0]["statistic"] == 1.5
+        assert parsed["results"][0]["extra"]["values"] == [2, None]
+
+    def test_nonfinite_json_values_become_null(
+        self, sample_report: RunReport
+    ) -> None:
+        """JSON remains strict when a manually built result is non-finite."""
+        report = RunReport(
+            data_hash=sample_report.data_hash,
+            source_description=sample_report.source_description,
+            config=sample_report.config,
+            results=[
+                TestResult(
+                    method_name="edge",
+                    category="diagnostic",
+                    citation="citation",
+                    statistic=float("nan"),
+                    p_value=None,
+                    ci_lower=None,
+                    ci_upper=None,
+                    ci_level=None,
+                )
+            ],
+        )
+        parsed = json.loads(render_json(report))
+        assert parsed["results"][0]["statistic"] is None
+
+    def test_write_report(
+        self, sample_report: RunReport, tmp_path: Path
+    ) -> None:
         """write_report creates both files."""
         md_path, json_path = write_report(sample_report, tmp_path)
         assert md_path.exists()
@@ -132,6 +199,58 @@ class TestRunner:
         report = run((a, b), config)
         for result in report.results:
             assert len(result.citation) > 0
+
+    def test_constant_samples_return_structured_statuses(self) -> None:
+        """Degenerate samples do not crash the full runner."""
+        from twosample_means.runner import run
+
+        config = RunConfig(
+            include_bayesian=False,
+            include_resampling=False,
+        )
+        report = run(
+            (
+                np.ones(4),
+                np.ones(4),
+            ),
+            config,
+        )
+        assert any(
+            result.status in {"skipped", "not_estimable"}
+            for result in report.results
+        )
+        assert all(
+            value not in {"nan", "inf", "-inf"}
+            for result in report.results
+            for value in (
+                str(result.statistic).lower(),
+                str(result.p_value).lower(),
+            )
+        )
+
+    def test_small_samples_skip_incompatible_diagnostics(self) -> None:
+        """Diagnostics with documented minimum sizes are explicit skips."""
+        from twosample_means.runner import run
+
+        report = run(
+            (np.array([1.0, 2.0]), np.array([2.0, 3.0])),
+            RunConfig(include_bayesian=False, include_resampling=False),
+        )
+        dagostino = [
+            result
+            for result in report.results
+            if result.method_name == "D'Agostino K² (A)"
+        ]
+        assert len(dagostino) == 1
+        assert dagostino[0].status == "skipped"
+        assert dagostino[0].statistic is None
+
+    def test_tuple_input_is_validated(self) -> None:
+        """Direct runner input uses the same validation boundary as load."""
+        from twosample_means.runner import run
+
+        with pytest.raises(DataValidationError, match="non-finite"):
+            run((np.array([1.0, np.nan]), np.array([1.0, 2.0])), RunConfig())
 
     def test_run_tuple_input_has_real_hash(self) -> None:
         """Tuple input produces a real SHA-256 hash, not a placeholder."""

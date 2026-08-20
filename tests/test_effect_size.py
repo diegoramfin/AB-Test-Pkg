@@ -6,6 +6,7 @@ import pytest
 from twosample_means.config import RunConfig
 from twosample_means.effect_size import (
     EffectSizeResult,
+    ResourceLimitError,
     cliff_delta,
     cohens_d,
     hedges_g,
@@ -115,3 +116,60 @@ class TestHodgesLehmann:
         assert np.isfinite(result.point_estimate)
         assert result.ci_lower < result.ci_upper
         assert "Hodges" in result.citation
+
+    def test_ci_is_bounded_and_ordered(self) -> None:
+        """The rank-based CI stays within the pairwise differences."""
+        a = np.array([1.0, 2.0, 3.0])
+        b = np.array([4.0, 5.0, 6.0])
+        result = hodges_lehmann(a, b, RunConfig())
+        assert -5.0 <= result.ci_lower < result.ci_upper <= -1.0
+
+    def test_pairwise_budget_is_enforced(self) -> None:
+        """Large exact HL computations fail before outer allocation."""
+        config = RunConfig(max_pairwise_comparisons=8)
+        with pytest.raises(ResourceLimitError, match="pairwise budget"):
+            hodges_lehmann(
+                np.arange(3, dtype=float),
+                np.arange(3, dtype=float),
+                config,
+            )
+
+
+class TestEffectSizeEdgeCases:
+    """Edge cases for bounded effect-size CIs."""
+
+    def test_cliff_delta_complete_separation(self, config: RunConfig) -> None:
+        """Cliff's delta at complete separation has a non-point CI."""
+        a = np.array([10.0, 11.0, 12.0])
+        b = np.array([1.0, 2.0, 3.0])
+        result = cliff_delta(a, b, config)
+        assert result.point_estimate == 1.0
+        assert -1.0 <= result.ci_lower < result.ci_upper <= 1.0
+        assert result.ci_lower < 1.0
+
+    def test_rank_biserial_complete_separation(
+        self, config: RunConfig
+    ) -> None:
+        """Rank-biserial at complete separation has a non-point CI."""
+        a = np.array([10.0, 11.0, 12.0])
+        b = np.array([1.0, 2.0, 3.0])
+        result = rank_biserial(a, b, config)
+        assert result.point_estimate == 1.0
+        assert -1.0 <= result.ci_lower < result.ci_upper <= 1.0
+        assert result.ci_lower < 1.0
+
+    def test_cliff_delta_with_ties(self, config: RunConfig) -> None:
+        """Cliff's delta stays inside [-1, 1] with ties."""
+        a = np.array([1.0, 2.0, 3.0])
+        b = np.array([1.0, 2.0, 4.0])
+        result = cliff_delta(a, b, config)
+        assert -1.0 <= result.point_estimate <= 1.0
+        assert -1.0 <= result.ci_lower < result.ci_upper <= 1.0
+
+    def test_rank_biserial_with_ties(self, config: RunConfig) -> None:
+        """Rank-biserial stays inside [-1, 1] with ties."""
+        a = np.array([1.0, 2.0, 3.0])
+        b = np.array([1.0, 2.0, 4.0])
+        result = rank_biserial(a, b, config)
+        assert -1.0 <= result.point_estimate <= 1.0
+        assert -1.0 <= result.ci_lower < result.ci_upper <= 1.0

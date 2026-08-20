@@ -66,6 +66,7 @@ class TestNormality:
         assert isinstance(result, DiagnosticResult)
         assert result.method_name == "Shapiro-Wilk"
         assert np.isfinite(result.statistic)
+        assert result.p_value is not None
         assert 0.0 <= result.p_value <= 1.0
         assert "Shapiro" in result.citation
 
@@ -75,6 +76,7 @@ class TestNormality:
         """Shapiro-Wilk on skewed data returns valid result."""
         result = shapiro_wilk(skewed_data, config)
         assert np.isfinite(result.statistic)
+        assert result.p_value is not None
         assert 0.0 <= result.p_value <= 1.0
 
     def test_anderson_darling_normal(
@@ -95,6 +97,7 @@ class TestNormality:
         result = dagostino_k2(normal_data, config)
         assert result.method_name == "D'Agostino K²"
         assert np.isfinite(result.statistic)
+        assert result.p_value is not None
         assert 0.0 <= result.p_value <= 1.0
         assert "D'Agostino" in result.citation
 
@@ -104,6 +107,7 @@ class TestNormality:
         """D'Agostino K² on skewed data returns valid result."""
         result = dagostino_k2(skewed_data, config)
         assert np.isfinite(result.statistic)
+        assert result.p_value is not None
         assert 0.0 <= result.p_value <= 1.0
 
     def test_no_decision_in_results(
@@ -129,6 +133,7 @@ class TestVarianceHomogeneity:
         result = levene(a, b, config)
         assert result.method_name == "Levene"
         assert np.isfinite(result.statistic)
+        assert result.p_value is not None
         assert 0.0 <= result.p_value <= 1.0
         assert "Levene" in result.citation
 
@@ -141,6 +146,7 @@ class TestVarianceHomogeneity:
         a, b = unequal_var_data
         result = levene(a, b, config)
         assert np.isfinite(result.statistic)
+        assert result.p_value is not None
         assert 0.0 <= result.p_value <= 1.0
 
     def test_bartlett_equal_var(

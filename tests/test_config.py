@@ -61,6 +61,10 @@ class TestRunConfig:
         with pytest.raises(ValueError, match="outlier_method"):
             RunConfig(outlier_method="invalid")
 
+    def test_seed_zero_is_accepted(self) -> None:
+        """Zero is a valid deterministic random seed."""
+        assert RunConfig(seed=0).seed == 0
+
     def test_custom_values_accepted(self) -> None:
         """Valid custom values must be accepted."""
         config = RunConfig(
@@ -74,6 +78,17 @@ class TestRunConfig:
         assert config.mcmc_draws == 4000
         assert config.seed == 123
 
+    def test_invalid_numeric_parameters_rejected(self) -> None:
+        """Invalid numerical values are rejected before analysis."""
+        with pytest.raises(ValueError, match="population_variance_a"):
+            RunConfig(population_variance_a=0.0)
+        with pytest.raises(ValueError, match="population_variance_b"):
+            RunConfig(population_variance_b=float("nan"))
+        with pytest.raises(ValueError, match="bayes_factor_prior_width"):
+            RunConfig(bayes_factor_prior_width=0.0)
+        with pytest.raises(ValueError, match="max_pairwise_comparisons"):
+            RunConfig(max_pairwise_comparisons=0)
+
 
 class TestInputSpec:
     """Tests for InputSpec construction."""
@@ -84,8 +99,8 @@ class TestInputSpec:
             sample_a=[1.0, 2.0, 3.0],
             sample_b=[4.0, 5.0, 6.0],
         )
-        assert list(spec.sample_a) == [1.0, 2.0, 3.0]
-        assert list(spec.sample_b) == [4.0, 5.0, 6.0]
+        assert spec.sample_a == [1.0, 2.0, 3.0]
+        assert spec.sample_b == [4.0, 5.0, 6.0]
 
     def test_from_paths(self) -> None:
         """InputSpec accepts file paths."""

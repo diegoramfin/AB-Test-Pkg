@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/diegoramfin/AB-Test-Pkg/schemas/experiment-result-v1.json",
+  "title": "twosample-means experiment result",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "status",
+    "experiment_id",
+    "data_hash",
+    "config",
+    "source_rows",
+    "analysis_rows",
+    "excluded_rows",
+    "assignment_diagnostics",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": { "const": "experiment-result-v1" },
+    "status": { "enum": ["ok", "warning"] },
+    "experiment_id": { "type": "string" },
+    "data_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "config": { "type": "object" },
+    "source_rows": { "type": "integer", "minimum": 0 },
+    "analysis_rows": { "type": "integer", "minimum": 0 },
+    "excluded_rows": { "type": "integer", "minimum": 0 },
+    "assignment_diagnostics": {
+      "type": "object",
+      "required": ["status", "assignment_counts", "warnings"],
+      "properties": {
+        "status": { "enum": ["ok", "warning"] },
+        "assignment_counts": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric_name", "status", "method", "family"],
+        "properties": {
+          "metric_name": { "type": "string" },
+          "status": { "enum": ["ok", "not_estimable"] },
+          "method": { "type": "string" },
+          "family": { "type": "string" },
+          "p_value": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "adjusted_p_value": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "ci_lower": { "type": ["number", "null"] },
+          "ci_upper": { "type": ["number", "null"] },
+          "simultaneous_ci_lower": { "type": ["number", "null"] },
+          "simultaneous_ci_upper": { "type": ["number", "null"] }
+        }
+      }
+    }
+  }
+}
