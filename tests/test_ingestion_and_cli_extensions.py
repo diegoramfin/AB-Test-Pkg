@@ -247,6 +247,85 @@ def test_experiment_cli_supports_separate_count_and_ratio_files(
     assert report["config"]["unit_type"] == "user"
 
 
+def test_experiment_cli_accepts_expected_allocation(tmp_path: Path) -> None:
+    """The SRM CLI flag reaches diagnostics and renders a valid report."""
+    data_path = tmp_path / "experiment.csv"
+    pd.DataFrame(
+        {
+            "user_id": range(8),
+            "variant": ["control"] * 4 + ["treatment"] * 4,
+            "converted": [0, 0, 1, 1, 0, 1, 1, 1],
+        }
+    ).to_csv(data_path, index=False)
+    output = tmp_path / "srm-report"
+
+    exit_code = main(
+        [
+            "experiment",
+            str(data_path),
+            "--unit-col",
+            "user_id",
+            "--assignment-col",
+            "variant",
+            "--control",
+            "control",
+            "--treatment",
+            "treatment",
+            "--metric",
+            "conversion_rate=converted:binary:primary",
+            "--expected-allocation",
+            "control=0.5,treatment=0.5",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    diagnostics = report["assignment_diagnostics"]
+    assert diagnostics["sample_ratio_mismatch_evaluated"] is True
+    assert diagnostics["expected_allocation"] == {
+        "control": 0.5,
+        "treatment": 0.5,
+    }
+    assert diagnostics["sample_ratio_mismatch_p_value"] is not None
+
+
+def test_render_experiment_json_validates_against_bundled_schema(
+    tmp_path: Path,
+) -> None:
+    """Rendered experiment JSON is validated before it is written."""
+    from twosample_means import reporting
+    from twosample_means.ab_testing import analyze_experiment
+    from twosample_means.schemas import (
+        SchemaValidationError,
+        validate_experiment_json,
+    )
+
+    config = _experiment_config(
+        metrics=(MetricSpec("orders", "orders", "count", role="primary"),)
+    )
+    data = pd.concat(
+        [_arm_frame(0), _arm_frame(4)],
+        ignore_index=True,
+    ).assign(
+        variant=["control"] * 4 + ["treatment"] * 4,
+    )
+
+    document = reporting.render_experiment_json(
+        analyze_experiment(data, config)
+    )
+    parsed = validate_experiment_json(document)
+
+    assert parsed["schema_version"] == "experiment-result-v1"
+    missing = parsed.copy()
+    del missing["experiment_id"]
+    with pytest.raises(SchemaValidationError, match="missing required"):
+        validate_experiment_json(json.dumps(missing))
+    with pytest.raises(SchemaValidationError, match="not valid JSON"):
+        validate_experiment_json("{")
+
+
 def test_kaggle_registry_exposes_manifests_and_multiple_datasets(
     tmp_path: Path,
 ) -> None:

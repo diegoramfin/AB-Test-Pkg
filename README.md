@@ -64,11 +64,13 @@ The registry currently supports:
 | Name | Dataset | Expected rows |
 |---|---|---|
 | `marketing-campaign-ab` | `amirmotefaker/ab-testing-dataset` | campaign-day aggregates |
-| `landing-page-ab` | `zhangluyuan/ab-testing` | expected user rows; validate duplicates |
+| `landing-page-ab` | `zhangluyuan/ab-testing` | expected user rows; flagged `teaching-sample` |
 
 Each cache includes `manifest.json` with source URL, license guidance,
-aggregation level, expected unit semantics, and expected columns. The manifest
-is descriptive and does not certify randomization or causal validity. Configure
+aggregation level, expected unit semantics, quality flag, and expected
+columns. Datasets flagged `teaching-sample` print a warning during fetch and
+must not be used as evidence about product effects. The manifest is
+descriptive and does not certify randomization or causal validity. Configure
 Kaggle separately with its official CLI before fetching.
 
 ## CLI usage
@@ -105,6 +107,19 @@ to isolate correction families. `--multiplicity` accepts `none`, `holm`, or
 simultaneous intervals. `--multiplicity-scope family` (the default) corrects
 within each `--metric-family`; `--multiplicity-scope global` pools every
 estimable metric into one correction family.
+
+When the intended assignment shares are known, declare them so the run
+actually evaluates sample-ratio mismatch instead of recording that it was
+not evaluated:
+
+```bash
+uv run twosample-means experiment data/checkout.csv ... \
+  --expected-allocation control=0.5,treatment=0.5
+```
+
+Every generated `report.json` is validated against the bundled
+`experiment-result-v1` JSON Schema before it is written, so rendered reports
+cannot silently drift from the declared contract.
 
 For a single experiment CSV, pass its path with `--unit-col`,
 `--assignment-col`, `--control`, and `--treatment`. Separate control and

@@ -27,7 +27,13 @@
     "excluded_rows": { "type": "integer", "minimum": 0 },
     "assignment_diagnostics": {
       "type": "object",
-      "required": ["status", "assignment_counts", "warnings"],
+      "required": [
+        "status",
+        "assignment_counts",
+        "sample_ratio_mismatch_evaluated",
+        "expected_allocation",
+        "warnings"
+      ],
       "properties": {
         "status": { "enum": ["ok", "warning"] },
         "assignment_counts": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },

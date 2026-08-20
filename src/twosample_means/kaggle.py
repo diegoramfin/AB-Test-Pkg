@@ -27,6 +27,8 @@ class DatasetManifest:
     expected_files: tuple[str, ...]
     unit_column: str | None = None
     assignment_column: str | None = None
+    quality: str = "verified"
+    quality_notes: str = ""
 
     def as_dict(self) -> dict[str, object]:
         """Return JSON-compatible manifest metadata."""
@@ -69,12 +71,20 @@ LANDING_PAGE_AB = KaggleDataset(
         license="Kaggle dataset page; verify before redistribution",
         aggregation_level="user-row",
         expected_unit_semantics=(
-            "Expected one row per user with assignment and conversion fields; "
-            "validate duplicate users and experiment contamination before use."
+            "One row per user with assignment and conversion fields; original "
+            "row counts imply an unusually high and implausible baseline "
+            "conversion rate, and duplicate-user contamination has been "
+            "reported publicly for this dataset."
         ),
         expected_files=("ab_data.csv",),
         unit_column="user_id",
         assignment_column="group",
+        quality="teaching-sample",
+        quality_notes=(
+            "Known to contain contaminated/duplicated users; use only as a "
+            "pipeline teaching example, never as evidence about landing-page "
+            "effects."
+        ),
     ),
 )
 

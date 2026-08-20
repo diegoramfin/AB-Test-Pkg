@@ -47,6 +47,7 @@ from twosample_means.kaggle import (
     DATASETS,
     KaggleFetchError,
     fetch_dataset,
+    get_dataset_manifest,
 )
 from twosample_means.reporting import (
     render_experiment_markdown,
@@ -155,6 +156,13 @@ def _run_fetch(args: argparse.Namespace) -> int:
         print(f"Error: {error}", file=sys.stderr)
         return 2
 
+    manifest = get_dataset_manifest(args.dataset)
+    if manifest.quality != "verified":
+        print(
+            f"Note: {args.dataset} is flagged as '{manifest.quality}'. "
+            f"{manifest.quality_notes}",
+            file=sys.stderr,
+        )
     print(f"Dataset cache: {args.output}")
     for path in files:
         print(f"Downloaded: {path}")
@@ -302,6 +310,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Correct within metric families or globally across all metrics "
             "(default: family)."
+        ),
+    )
+    experiment_parser.add_argument(
+        "--expected-allocation",
+        default=None,
+        metavar="ARM=SHARE,...",
+        help=(
+            "Intended assignment shares, e.g. control=0.5,treatment=0.5; "
+            "enables the sample-ratio mismatch test."
         ),
     )
     experiment_parser.add_argument(
@@ -539,6 +556,7 @@ def _build_experiment_config(
             "choose either a positional experiment CSV or --csv-a/--csv-b"
         )
     family_overrides = _parse_metric_families(args.metric_family)
+    expected_allocation = _parse_expected_allocation(args.expected_allocation)
     metrics = tuple(
         _parse_metric_definition(definition, family_overrides)
         for definition in args.metric
@@ -565,6 +583,7 @@ def _build_experiment_config(
         multiplicity=args.multiplicity,
         multiplicity_scope=cast(MultiplicityScope, args.multiplicity_scope),
         unit_type=cast(UnitType, args.unit_type),
+        expected_allocation=expected_allocation,
         seed=args.seed,
     )
 
@@ -620,6 +639,42 @@ def _parse_metric_definition(
         role=role,
         family=family_overrides.get(name, "default"),
     )
+
+
+def _parse_expected_allocation(
+    value: str | None,
+) -> dict[str, float] | None:
+    """Parse ``ARM=SHARE,...`` into an allocation dictionary."""
+    if value is None:
+        return None
+    shares: dict[str, float] = {}
+    pairs = value.split(",")
+    for pair in pairs:
+        if "=" not in pair:
+            raise ValueError(
+                f"expected allocation {pair!r} must use ARM=SHARE"
+            )
+        arm, share = (part.strip() for part in pair.split("=", maxsplit=1))
+        if not arm:
+            raise ValueError(
+                "expected allocation arm labels must be non-empty"
+            )
+        try:
+            parsed_share = float(share)
+        except ValueError as error:
+            raise ValueError(
+                f"expected allocation share for {arm!r} must be a number"
+            ) from error
+        if not np.isfinite(parsed_share) or parsed_share <= 0.0:
+            raise ValueError(
+                f"expected allocation share for {arm!r} must be positive"
+            )
+        if arm in shares:
+            raise ValueError(
+                f"expected allocation arm specified more than once: {arm!r}"
+            )
+        shares[arm] = parsed_share
+    return shares
 
 
 def _load_experiment_input(

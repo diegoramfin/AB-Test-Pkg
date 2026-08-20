@@ -28,6 +28,8 @@ class AssignmentDiagnostics:
     duplicate_units: int
     multi_arm_units: int
     sample_ratio_mismatch_p_value: float | None
+    sample_ratio_mismatch_evaluated: bool
+    expected_allocation: dict[str, float] | None
     warnings: tuple[str, ...] = ()
 
 
@@ -123,6 +125,8 @@ def diagnose_assignment(
         duplicate_units=duplicate_units,
         multi_arm_units=multi_arm_units,
         sample_ratio_mismatch_p_value=srm_p_value,
+        sample_ratio_mismatch_evaluated=config.expected_allocation is not None,
+        expected_allocation=config.expected_allocation,
         warnings=tuple(warnings),
     )
 

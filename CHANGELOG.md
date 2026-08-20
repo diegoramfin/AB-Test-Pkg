@@ -11,6 +11,9 @@ All notable changes to `twosample-means` are documented here.
 - CLI count and ratio metric declarations.
 - Configurable legacy NaN exclusion with strict error defaults.
 - Kaggle dataset manifests and an additional landing-page A/B registry entry.
+- CLI `--expected-allocation` flag that enables the sample-ratio mismatch test.
+- Strict validation of rendered experiment JSON against the bundled schema.
+- Dataset quality flags with fetch-time warnings for teaching-only datasets.
 
 ## [0.2.0] - 2026-08-19
 

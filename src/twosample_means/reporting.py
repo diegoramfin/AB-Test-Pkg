@@ -25,7 +25,10 @@ from typing import Any
 import numpy as np
 
 from twosample_means.ab_testing.results import ExperimentResult
-from twosample_means.schemas import EXPERIMENT_RESULT_SCHEMA_VERSION
+from twosample_means.schemas import (
+    EXPERIMENT_RESULT_SCHEMA_VERSION,
+    validate_experiment_json,
+)
 
 
 @dataclass(frozen=True)
@@ -293,6 +296,10 @@ def render_experiment_markdown(result: ExperimentResult) -> str:
             f"- **Missing unit IDs**: {diagnostics.missing_unit}",
             f"- **Duplicate units**: {diagnostics.duplicate_units}",
             f"- **Multi-arm units**: {diagnostics.multi_arm_units}",
+            "- **Sample-ratio mismatch evaluated**: "
+            f"{diagnostics.sample_ratio_mismatch_evaluated}",
+            "- **Expected allocation**: "
+            f"{_format_report_value(diagnostics.expected_allocation)}",
             "- **Sample-ratio mismatch p-value**: "
             f"{diagnostics.sample_ratio_mismatch_p_value}",
         ]
@@ -318,13 +325,20 @@ def write_experiment_report(
     result: ExperimentResult,
     output_dir: str | Path,
 ) -> tuple[Path, Path]:
-    """Write Markdown and JSON files for an experiment result."""
+    """Write Markdown and JSON files for an experiment result.
+
+    The rendered JSON is validated against the bundled schema before it is
+    written, so a future report change cannot silently drift from the
+    declared contract.
+    """
+    rendered = render_experiment_json(result)
+    validate_experiment_json(rendered)
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     md_path = out / "report.md"
     json_path = out / "report.json"
     md_path.write_text(render_experiment_markdown(result), encoding="utf-8")
-    json_path.write_text(render_experiment_json(result), encoding="utf-8")
+    json_path.write_text(rendered, encoding="utf-8")
     return md_path, json_path
 
 
