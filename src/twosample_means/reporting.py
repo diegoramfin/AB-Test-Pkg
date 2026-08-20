@@ -325,11 +325,12 @@ def write_experiment_report(
     result: ExperimentResult,
     output_dir: str | Path,
 ) -> tuple[Path, Path]:
-    """Write Markdown and JSON files for an experiment result.
+    """Write Markdown, HTML, and JSON files for an experiment result.
 
     The rendered JSON is validated against the bundled schema before it is
     written, so a future report change cannot silently drift from the
-    declared contract.
+    declared contract. The HTML report is a self-contained artifact with no
+    external assets.
     """
     rendered = render_experiment_json(result)
     validate_experiment_json(rendered)
@@ -337,9 +338,254 @@ def write_experiment_report(
     out.mkdir(parents=True, exist_ok=True)
     md_path = out / "report.md"
     json_path = out / "report.json"
+    html_path = out / "report.html"
     md_path.write_text(render_experiment_markdown(result), encoding="utf-8")
     json_path.write_text(rendered, encoding="utf-8")
+    html_path.write_text(render_experiment_html(result), encoding="utf-8")
     return md_path, json_path
+
+
+def render_experiment_html(result: ExperimentResult) -> str:
+    """Render an experiment result as a self-contained HTML document."""
+    import html as html_module
+
+    escape = html_module.escape
+    lines = [
+        "<!DOCTYPE html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="utf-8">',
+        f"<title>Experiment {escape(result.experiment_id)}</title>",
+        "<style>",
+        _HTML_STYLE,
+        "</style>",
+        "</head>",
+        "<body>",
+        "<main>",
+        "<h1>Experiment Analysis Report</h1>",
+        '<section class="card">',
+        "<h2>Experiment</h2>",
+        '<table class="meta">',
+    ]
+    meta_rows = [
+        ("Experiment ID", result.experiment_id),
+        ("Status", result.status),
+        ("Schema version", EXPERIMENT_RESULT_SCHEMA_VERSION),
+        ("Source rows", result.source_rows),
+        ("Analysis rows", result.analysis_rows),
+        ("Excluded rows", result.excluded_rows),
+        ("Multiplicity", result.config.get("multiplicity", "none")),
+        (
+            "Multiplicity scope",
+            result.config.get("multiplicity_scope", "family"),
+        ),
+        ("Data hash", f"<code>{escape(result.data_hash)}</code>"),
+    ]
+    for label, value in meta_rows:
+        lines.extend(
+            [
+                "<tr>",
+                f"<th>{escape(str(label))}</th>",
+                f"<td>{_html_cell(value)}</td>",
+                "</tr>",
+            ]
+        )
+    lines.extend(["</table>", "</section>"])
+
+    diagnostics = result.assignment_diagnostics
+    lines.extend(
+        [
+            '<section class="card">',
+            "<h2>Assignment Diagnostics</h2>",
+            '<table class="meta">',
+            "<tr><th>Status</th>",
+            f"<td>{escape(diagnostics.status)}</td></tr>",
+            "<tr><th>Assignment counts</th>",
+            f"<td>{escape(str(diagnostics.assignment_counts))}</td></tr>",
+            "<tr><th>Missing assignments</th>",
+            f"<td>{diagnostics.missing_assignment}</td></tr>",
+            "<tr><th>Unknown assignments</th>",
+            f"<td>{diagnostics.unknown_assignment}</td></tr>",
+            "<tr><th>Missing unit IDs</th>",
+            f"<td>{diagnostics.missing_unit}</td></tr>",
+            "<tr><th>Duplicate units</th>",
+            f"<td>{diagnostics.duplicate_units}</td></tr>",
+            "<tr><th>Multi-arm units</th>",
+            f"<td>{diagnostics.multi_arm_units}</td></tr>",
+            "<tr><th>SRM evaluated</th>",
+            f"<td>{diagnostics.sample_ratio_mismatch_evaluated}</td></tr>",
+            "<tr><th>Expected allocation</th>",
+            f"<td>{escape(str(diagnostics.expected_allocation))}</td></tr>",
+            "<tr><th>SRM p-value</th>",
+            f"<td>{diagnostics.sample_ratio_mismatch_p_value}</td></tr>",
+            "</table>",
+        ]
+    )
+    if diagnostics.warnings:
+        lines.append('<ul class="warnings">')
+        for warning in diagnostics.warnings:
+            lines.append(f"<li>{escape(warning)}</li>")
+        lines.append("</ul>")
+    lines.append("</section>")
+
+    lines.append('<section class="card">')
+    lines.append("<h2>Metrics</h2>")
+    for metric in result.metrics:
+        lines.extend(_render_experiment_metric_html(metric))
+    lines.append("</section>")
+    lines.extend(
+        [
+            "<footer>Schema "
+            f"<code>{escape(EXPERIMENT_RESULT_SCHEMA_VERSION)}</code>; "
+            "estimates are reported without accept/reject "
+            "decisions.</footer>",
+            "</main>",
+            "</body>",
+            "</html>",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _html_cell(value: Any) -> str:
+    """Render one table cell, allowing prebuilt HTML fragments."""
+    import html as html_module
+
+    if isinstance(value, str) and value.startswith("<"):
+        return value
+    return html_module.escape(str(value))
+
+
+_HTML_STYLE = """
+:root { color-scheme: light dark; }
+body { font-family: system-ui, -apple-system, sans-serif; margin: 0;
+  padding: 2rem; background: #f7f7f8; color: #1c1c1e; }
+main { max-width: 60rem; margin: 0 auto; }
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.15rem; margin-top: 1.5rem; }
+.card { background: #fff; border: 1px solid #e3e3e6; border-radius: 8px;
+  padding: 1rem 1.25rem; margin-bottom: 1rem; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #eee; font-size: 0.9rem; vertical-align: top; }
+th { width: 14rem; color: #555; font-weight: 600; }
+.warnings li { color: #8a4b00; }
+footer { margin-top: 2rem; color: #777; font-size: 0.8rem; }
+@media (prefers-color-scheme: dark) {
+  body { background: #1b1b1d; color: #e8e8ea; }
+  .card { background: #26262a; border-color: #3a3a40; }
+  th, td { border-color: #33333a; }
+  th { color: #b0b0b8; }
+  footer { color: #8e8e96; }
+}
+"""
+
+
+def _render_experiment_metric_html(metric: Any) -> list[str]:
+    """Render one metric as an HTML mini-table."""
+    import html as html_module
+
+    escape = html_module.escape
+    rows: list[tuple[str, str]] = [
+        ("Status", str(metric.status)),
+        ("Role", str(metric.role)),
+        ("Family", str(metric.family)),
+        ("Method", str(metric.method)),
+        (
+            "Comparison",
+            f"{metric.treatment_label} - {metric.control_label}",
+        ),
+    ]
+    contrast = getattr(metric, "contrast_name", None)
+    if contrast is not None:
+        rows.append(("Contrast", str(contrast)))
+    if getattr(metric, "cluster_robust", False):
+        rows.append(("Inference", "cluster-robust (G-2 df)"))
+    rows.extend(_arm_summary_rows("Control", metric.control))
+    rows.extend(_arm_summary_rows("Treatment", metric.treatment))
+    for label, value in (
+        ("Absolute effect (adjusted)", metric.absolute_effect),
+        (
+            "Absolute effect (unadjusted)",
+            getattr(metric, "unadjusted_absolute_effect", None),
+        ),
+        ("Risk ratio", getattr(metric, "risk_ratio", None)),
+        ("Variance reduction", getattr(metric, "variance_reduction", None)),
+        ("CUPED theta", getattr(metric, "theta", None)),
+        ("Clusters", getattr(metric, "clusters", None)),
+        (
+            "Naive standard error",
+            getattr(metric, "naive_standard_error", None),
+        ),
+        ("Standard error", getattr(metric, "standard_error", None)),
+        ("p-value", metric.p_value),
+        ("Adjusted p-value", metric.adjusted_p_value),
+        ("Practical effect", metric.practical_effect),
+        ("Practically significant", metric.practically_significant),
+    ):
+        if value is not None:
+            rows.append((label, str(value)))
+    if metric.ci_lower is not None and metric.ci_upper is not None:
+        rows.append(
+            (
+                f"{metric.ci_level * 100.0:.0f}% nominal CI",
+                f"[{metric.ci_lower:.6f}, {metric.ci_upper:.6f}]",
+            )
+        )
+    if (
+        metric.simultaneous_ci_lower is not None
+        and metric.simultaneous_ci_upper is not None
+        and metric.simultaneous_ci_level is not None
+    ):
+        rows.append(
+            (
+                f"{metric.simultaneous_ci_level * 100.0:.1f}% simultaneous CI "
+                f"({metric.simultaneous_ci_method or 'corrected'})",
+                f"[{metric.simultaneous_ci_lower:.6f}, "
+                f"{metric.simultaneous_ci_upper:.6f}]",
+            )
+        )
+    lines = [f"<h3>{escape(metric.metric_name)}</h3>", '<table class="meta">']
+    for label, value in rows:
+        lines.extend(
+            [
+                "<tr>",
+                f"<th>{escape(label)}</th>",
+                f"<td>{escape(value)}</td>",
+                "</tr>",
+            ]
+        )
+    for warning in metric.warnings:
+        lines.append(
+            "<tr><th>Warning</th>"
+            f'<td class="warnings">{escape(warning)}</td></tr>'
+        )
+    lines.append("</table>")
+    return lines
+
+
+def _arm_summary_rows(label: str, summary: Any) -> list[tuple[str, str]]:
+    """Return HTML-ready arm summary rows for any summary type."""
+    rows = [
+        (f"{label} n", str(summary.n)),
+        (f"{label} missing", str(summary.missing)),
+    ]
+    if hasattr(summary, "rate"):
+        rows.append((f"{label} rate", str(summary.rate)))
+        rows.append((f"{label} successes", str(summary.successes)))
+    elif hasattr(summary, "ratio"):
+        rows.append((f"{label} ratio", str(summary.ratio)))
+        rows.append((f"{label} numerator mean", str(summary.numerator_mean)))
+        rows.append(
+            (f"{label} denominator mean", str(summary.denominator_mean))
+        )
+    else:
+        rows.append((f"{label} mean", str(summary.mean)))
+        rows.append((f"{label} sd", str(summary.standard_deviation)))
+        unadjusted = getattr(summary, "unadjusted_mean", None)
+        if unadjusted is not None:
+            rows.append((f"{label} unadjusted mean", str(unadjusted)))
+    return rows
 
 
 def _render_experiment_metric(metric: Any) -> list[str]:
@@ -355,6 +601,8 @@ def _render_experiment_metric(metric: Any) -> list[str]:
     ]
     if getattr(metric, "contrast_name", None) is not None:
         lines.append(f"- **Contrast**: {metric.contrast_name}")
+    if getattr(metric, "cluster_robust", False):
+        lines.append("- **Inference**: cluster-robust (t with G-2 df)")
     lines.extend(_render_arm_summary("Control", metric.control))
     lines.extend(_render_arm_summary("Treatment", metric.treatment))
     for label, value in (
@@ -365,6 +613,11 @@ def _render_experiment_metric(metric: Any) -> list[str]:
         ),
         ("Variance reduction", getattr(metric, "variance_reduction", None)),
         ("CUPED theta", getattr(metric, "theta", None)),
+        ("Clusters", getattr(metric, "clusters", None)),
+        (
+            "Naive standard error",
+            getattr(metric, "naive_standard_error", None),
+        ),
         ("Relative lift", metric.relative_lift),
         ("Standard error", getattr(metric, "standard_error", None)),
         ("p-value", metric.p_value),

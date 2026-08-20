@@ -323,6 +323,14 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     experiment_parser.add_argument(
+        "--cluster",
+        default=None,
+        help=(
+            "Cluster column for cluster-robust standard errors on "
+            "continuous and count metrics."
+        ),
+    )
+    experiment_parser.add_argument(
         "--expected-allocation",
         default=None,
         metavar="ARM=SHARE,...",
@@ -599,6 +607,7 @@ def _build_experiment_config(
         multiplicity=args.multiplicity,
         multiplicity_scope=cast(MultiplicityScope, args.multiplicity_scope),
         unit_type=cast(UnitType, args.unit_type),
+        cluster=args.cluster,
         expected_allocation=expected_allocation,
         seed=args.seed,
     )

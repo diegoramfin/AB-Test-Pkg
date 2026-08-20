@@ -126,6 +126,14 @@ uv run twosample-means experiment data/checkout.csv \
   --covariate revenue=pre_period_spend
 ```
 
+Cluster-robust standard errors are available through `--cluster COLUMN`:
+
+```bash
+uv run twosample-means experiment data/checkout.csv \
+  ... --metric revenue=revenue:continuous:primary \
+  --cluster store_id
+```
+
 Every generated `report.json` is validated against the bundled
 `experiment-result-v1` JSON Schema before it is written, so rendered reports
 cannot silently drift from the declared contract.
@@ -247,6 +255,11 @@ nominal `ci_lower`/`ci_upper` fields remain available alongside
   adjusted effect, within-arm covariate correlation, theta, and the
   variance reduction percentage. CUPED assumes the covariate is measured
   before treatment — the caller declares and verifies that.
+- `ExperimentConfig(cluster="cluster_column")` enables cluster-robust
+  (Liang & Zeger, 1986) standard errors for continuous and count metrics.
+  The CR1 sandwich with a small-sample correction and `G-2` degrees of
+  freedom replaces Welch inference; clusters spanning both arms produce an
+  explicit warning. CUPED adjustment and clustering compose.
 - `ContrastSpec` declares named treatment-vs-control or arbitrary arm
   contrasts for multi-arm experiments. Unspecified multi-arm analyses are
   rejected rather than silently generating comparisons.
@@ -254,8 +267,30 @@ nominal `ci_lower`/`ci_upper` fields remain available alongside
   simulation-based planning for binary, continuous, count, and ratio metrics.
 - `SequentialPlan`, `alpha_spending_boundaries()`, and
   `evaluate_sequential()` provide predeclared O'Brien–Fleming or Pocock
-  alpha-spending looks. Boundaries use marginal normal quantiles and should be
-  treated as a documented initial sequential contract.
+  alpha-spending looks. Boundaries are calibrated by recursive numerical
+  quadrature over the canonical group-sequential joint distribution, so the
+  family-wise error rate across all looks equals the declared alpha.
+  `marginal_alpha_spending_boundaries()` remains available for reference.
+- `write_experiment_report()` writes `report.html` alongside the Markdown
+  and JSON files: a self-contained document with inline styling and no
+  external assets.
+
+## Examples
+
+`examples/` contains runnable, tested workflows (each also a pytest smoke
+case). Run one with:
+
+```bash
+uv run python examples/01_binary_conversion.py artifacts/examples/conversion
+```
+
+- `01_binary_conversion.py` — two-arm conversion-rate experiment with
+  expected-allocation SRM and Holm correction.
+- `02_continuous_cuped.py` — continuous revenue metric with CUPED variance
+  reduction.
+- `03_count_ratio.py` — count and ratio metrics in one experiment.
+- `04_planning_power_sequential.py` — simulation power/MDE and calibrated
+  sequential looks.
 
 Experiment JSON reports use the bundled `experiment-result-v1` JSON Schema.
 The schema is versioned independently from the Python package release.

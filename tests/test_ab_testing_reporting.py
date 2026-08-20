@@ -182,3 +182,22 @@ def test_write_experiment_report_creates_both_formats(
     assert markdown_path.exists()
     assert json_path.exists()
     json.loads(json_path.read_text(encoding="utf-8"))
+
+
+def test_write_experiment_report_includes_self_contained_html(
+    tmp_path: Path,
+) -> None:
+    """The HTML report is standalone and contains the analysis output."""
+    result = analyze_experiment(experiment_data(), experiment_config())
+
+    write_experiment_report(result, tmp_path)
+    html_text = (tmp_path / "report.html").read_text(encoding="utf-8")
+
+    assert html_text.startswith("<!DOCTYPE html>")
+    assert "Experiment Analysis Report" in html_text
+    assert result.experiment_id in html_text
+    assert "conversion_rate" in html_text
+    assert "Assignment Diagnostics" in html_text
+    assert "<style>" in html_text
+    assert html_text.count("<html") == 1
+    assert "</html>" in html_text

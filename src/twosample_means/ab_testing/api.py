@@ -7,6 +7,7 @@ from dataclasses import asdict, replace
 import pandas as pd
 
 from .binary import estimate_binary_metric
+from .clustered import estimate_clustered_metric
 from .config import ContrastSpec, ExperimentConfig, MetricSpec
 from .continuous import estimate_continuous_metric
 from .count import estimate_count_metric
@@ -110,12 +111,17 @@ def _estimate_metric(
             control=control,
             treatments=tuple(arm for arm in all_arms if arm != control),
         )
+    if comparison_config.cluster is not None:
+        return estimate_clustered_metric(
+            normalized, comparison_config, metric, treatment=treatment
+        )
     if metric.covariate is not None:
         if metric.kind != "binary" and metric.kind != "ratio":
             return estimate_cuped_metric(
                 normalized, comparison_config, metric, treatment=treatment
             )
         raise ValueError(f"covariate is not valid for kind={metric.kind!r}")
+
     if metric.kind == "binary":
         return estimate_binary_metric(
             normalized, comparison_config, metric, treatment=treatment

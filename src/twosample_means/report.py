@@ -8,6 +8,7 @@ as a module name.
 from .reporting import (
     RunReport,
     TestResult,
+    render_experiment_html,
     render_experiment_json,
     render_experiment_markdown,
     render_json,
@@ -19,6 +20,7 @@ from .reporting import (
 __all__ = [
     "RunReport",
     "TestResult",
+    "render_experiment_html",
     "render_experiment_json",
     "render_experiment_markdown",
     "render_json",

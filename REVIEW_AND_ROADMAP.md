@@ -285,10 +285,12 @@ which are sensitivity analyses.
 
 ### Variance reduction
 
-- CUPED using pre-period values measured before treatment.
+Status: CUPED with pre-period covariates is implemented for continuous and
+count metrics (including the CLI and cluster composition). Remaining:
+
 - ANCOVA/regression adjustment with treatment interactions considered.
 - Cross-fitting or train/evaluation separation for learned adjustments.
-- Report variance reduction and verify no post-treatment variable is used.
+- Explicit leakage guard flag in the report for the covariate column.
 
 ### Power and design analysis
 
@@ -300,12 +302,13 @@ which are sensitivity analyses.
 
 ### Sequential analysis
 
-Add only after fixed-horizon inference is stable:
+Status: alpha-spending boundaries are implemented and now calibrated
+(boundaries are solved against the canonical group-sequential joint
+distribution, so family-wise error matches the declared alpha). Remaining:
 
-- Alpha-spending or group-sequential boundaries.
 - Always-valid confidence sequences or e-values as a separate mode.
-- Explicit look schedule and stopping rule in the analysis plan.
-- No repeated unadjusted peeking.
+- Power and average sample number under the calibrated boundaries.
+- No repeated unadjusted peeking (documented usage rule).
 
 ## Difference-in-differences design
 
@@ -426,10 +429,14 @@ Each run should generate:
 - `data_fingerprint.json` containing provenance, not raw data.
 - Static plots that do not require a notebook to inspect.
 
-## Example notebook plan
+## Example workflow plan
 
-Notebooks should demonstrate workflows, while tested Python modules contain
-the real logic.
+`examples/` contains runnable, tested workflows (smoke-tested in CI);
+Notebook execution dependencies were deliberately removed from the package,
+so examples are Python scripts under `examples/` that write to an ignored
+artifacts directory.
+
+Planned additions mirror the original notebook list:
 
 1. `01_binary_conversion_ab.ipynb`
    - Synthetic and marketing conversion examples.

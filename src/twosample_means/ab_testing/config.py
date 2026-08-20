@@ -162,6 +162,7 @@ class ExperimentConfig:
     multiplicity: Multiplicity = "holm"
     multiplicity_scope: MultiplicityScope = "family"
     unit_type: UnitType = "user"
+    cluster: str | None = None
     expected_allocation: dict[str, float] | None = None
     time_column: str | None = None
     analysis_start: str | None = None
@@ -254,6 +255,8 @@ class ExperimentConfig:
             )
             if column is not None
         }
+        if self.cluster is not None and self.cluster in metric_columns:
+            raise ValueError("cluster column must differ from metric columns")
         if metric_columns.intersection(reserved_columns):
             raise ValueError(
                 "metric columns must differ from unit and assignment columns"
@@ -274,6 +277,14 @@ class ExperimentConfig:
             raise ValueError(
                 "unit_type must be 'user', 'aggregate', or 'unknown', "
                 f"got {self.unit_type!r}"
+            )
+        if self.cluster is not None and (
+            not isinstance(self.cluster, str) or not self.cluster.strip()
+        ):
+            raise ValueError("cluster must be a non-empty string")
+        if self.cluster in {"", self.unit_id, self.assignment}:
+            raise ValueError(
+                "cluster column must differ from unit and assignment columns"
             )
         if self.time_column is None and (
             self.analysis_start is not None or self.analysis_end is not None

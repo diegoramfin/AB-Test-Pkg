@@ -57,6 +57,8 @@ def _read_arm_csv(
         required.update(_metric_input_columns(metric))
     if config.time_column is not None:
         required.add(config.time_column)
+    if config.cluster is not None:
+        required.add(config.cluster)
     missing = sorted(required.difference(frame.columns))
     if missing:
         raise DataValidationError(
@@ -119,6 +121,8 @@ def normalize_experiment_data(
         )
 
     required = {config.unit_id, config.assignment}
+    if config.cluster is not None:
+        required.add(config.cluster)
     for metric in config.metrics:
         required.update(_metric_input_columns(metric))
     if config.time_column is not None:
@@ -140,6 +144,7 @@ def normalize_experiment_data(
         raise DataValidationError("analysis window contains no rows")
 
     _validate_units_and_assignment(frame, config)
+    _validate_cluster(frame, config)
     missing_outcomes: dict[str, int] = {}
     missing_covariates: dict[str, int] = {}
     for metric in config.metrics:
@@ -238,6 +243,22 @@ def _validate_units_and_assignment(
             f"assignment column '{config.assignment}' contains "
             "unknown labels: "
             f"{labels}; expected {sorted(valid_labels)}"
+        )
+
+
+def _validate_cluster(
+    frame: pd.DataFrame,
+    config: ExperimentConfig,
+) -> None:
+    """Require a complete, non-empty cluster assignment for every row."""
+    if config.cluster is None:
+        return
+    cluster_series = frame[config.cluster]
+    if cluster_series.isna().any():
+        count = int(cluster_series.isna().sum())
+        raise DataValidationError(
+            f"cluster column '{config.cluster}' contains {count} missing "
+            "value(s)"
         )
 
 

@@ -7,6 +7,7 @@ boundary for binary, continuous, count, and ratio metric analyses.
 
 from .api import analyze_experiment
 from .binary import BinaryMetricResult, BinarySummary, estimate_binary_metric
+from .clustered import estimate_clustered_metric
 from .config import (
     ContrastSpec,
     ExperimentConfig,
@@ -66,6 +67,7 @@ __all__ = [
     "estimate_count_metric",
     "estimate_ratio_metric",
     "estimate_cuped_metric",
+    "estimate_clustered_metric",
     "CupedMetricResult",
     "CupedSummary",
     "estimate_mde",

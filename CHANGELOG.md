@@ -16,6 +16,12 @@ All notable changes to `twosample-means` are documented here.
 - Dataset quality flags with fetch-time warnings for teaching-only datasets.
 - CUPED variance reduction for continuous and count metrics with CLI
   `--covariate` support.
+- Cluster-robust standard errors for continuous and count metrics with CLI
+  `--cluster` support.
+- Correlation-aware group-sequential boundary calibration replacing
+  marginal normal quantiles.
+- Self-contained HTML experiment reports.
+- Runnable `examples/` workflows with pytest smoke coverage.
 - ``CONTRIBUTING.md`` and ``SECURITY.md`` release-hygiene documentation.
 
 ## [0.2.0] - 2026-08-19
