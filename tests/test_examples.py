@@ -26,6 +26,7 @@ SUMMARY_FILES = {
         "difference-in-differences",
     ),
     "11_kaggle_manifest_adapter": ("kaggle_adapter.txt", "manifest"),
+    "15_staggered_adoption": ("staggered_did_report.md", "callaway"),
 }
 
 
@@ -46,6 +47,7 @@ SUMMARY_FILES = {
         "12_stratified_balance",
         "13_clustered_stratified_balance",
         "14_clustered_stratified_balance_cli",
+        "15_staggered_adoption",
     ],
 )
 def test_example_runs_to_completion(

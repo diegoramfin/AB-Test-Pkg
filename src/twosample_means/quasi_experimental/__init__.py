@@ -20,6 +20,11 @@ Implemented designs
   coefficients, when at least two pre periods exist.
 - Treatment-timing validation: unit-specific or staggered post indicators
   are rejected because the canonical design requires a single global onset.
+- Staggered-adoption difference-in-differences in the style of Callaway &
+  Sant'Anna (2021): group-time average treatment effects ATT(g, t) for
+  every adoption cohort and period, not-yet-treated comparison units,
+  optional anticipation windows, and group/calendar/event-time/overall
+  aggregation with a joint cluster-robust covariance.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import isfinite
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -704,6 +710,918 @@ def render_did_markdown(result: DidResult) -> str:
             "",
         ]
     )
+    for note in result.assumption_notes:
+        lines.append(f"- {note}")
+    if result.warnings:
+        lines.extend(["", "## Warnings", ""])
+        for warning in result.warnings:
+            lines.append(f"- {warning}")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Staggered-adoption difference-in-differences (Callaway & Sant'Anna, 2021)
+# ---------------------------------------------------------------------------
+
+_CS_ASSUMPTION_NOTES = (
+    "Parallel trends conditional on group and time: in the absence of "
+    "treatment, each adoption cohort would follow the same trend as the "
+    "not-yet-treated comparison units.",
+    "Staggered adoption with absorbing treatment: once a cohort is treated "
+    "it stays treated; switching back to control is not allowed.",
+    "No anticipation beyond the declared window: outcomes may respond only "
+    "from the first treated period minus the anticipation parameter.",
+    "Comparison group: at each period, the not-yet-treated units (later "
+    "cohorts plus never-treated units).",
+    "Balanced panel: every unit is observed in every period exactly once; "
+    "unbalanced panels are not supported by this estimator.",
+    "No interference: one unit's treatment must not affect another unit's "
+    "outcome (SUTVA).",
+)
+
+
+@dataclass(frozen=True)
+class _AttCell:
+    """One estimable (cohort, period) cell with its estimation sample."""
+
+    group: int
+    period: int
+    base: int
+    treated: list[int]
+    comparison: list[int]
+
+
+@dataclass(frozen=True)
+class GroupTimeAtt:
+    """The ATT for one adoption cohort in one calendar period."""
+
+    group: str
+    period: str
+    relative_time: int
+    att: float
+    standard_error: float
+    ci_lower: float
+    ci_upper: float
+    p_value: float
+    n_treated: int
+    n_comparison: int
+
+
+@dataclass(frozen=True)
+class GroupAtt:
+    """Group-level ATT averaged over the cohort's post periods."""
+
+    group: str
+    att: float
+    standard_error: float
+    ci_lower: float
+    ci_upper: float
+    p_value: float
+    units: int
+    post_periods: int
+
+
+@dataclass(frozen=True)
+class CalendarAtt:
+    """Calendar-time ATT averaged over cohorts treated by that period."""
+
+    period: str
+    att: float
+    standard_error: float
+    ci_lower: float
+    ci_upper: float
+    p_value: float
+
+
+@dataclass(frozen=True)
+class EventTimeAtt:
+    """Event-time ATT for one distance from treatment onset."""
+
+    relative_time: int
+    att: float
+    standard_error: float
+    ci_lower: float
+    ci_upper: float
+    p_value: float
+
+
+@dataclass(frozen=True)
+class OverallAtt:
+    """Size-weighted ATT over all post group-time cells."""
+
+    att: float
+    standard_error: float
+    naive_standard_error: float
+    ci_lower: float
+    ci_upper: float
+    p_value: float
+
+
+@dataclass(frozen=True)
+class PlaceboTest:
+    """Joint Wald test that clean pre-treatment cells are zero."""
+
+    statistic: float
+    degrees_of_freedom: int
+    p_value: float
+    cells: int
+
+
+@dataclass(frozen=True)
+class StaggeredDidResult:
+    """Complete staggered-adoption difference-in-differences result."""
+
+    method: str
+    anticipation: int
+    comparison: str
+    units: int
+    clusters: int
+    periods: int
+    ci_level: float
+    group_labels: tuple[str, ...]
+    period_labels: tuple[str, ...]
+    group_time_atts: tuple[GroupTimeAtt, ...]
+    group_atts: tuple[GroupAtt, ...]
+    calendar_atts: tuple[CalendarAtt, ...]
+    event_time_atts: tuple[EventTimeAtt, ...]
+    overall_att: OverallAtt
+    placebo: PlaceboTest | None
+    assumption_notes: tuple[str, ...]
+    warnings: tuple[str, ...]
+    status: str
+
+
+@dataclass(frozen=True)
+class CallawaySantAnna:
+    """Declarative specification for staggered-adoption DiD.
+
+    ``group`` names the column holding each unit's first-treated period
+    (a label present in the ``time`` column). Never-treated units must hold
+    the sentinel value ``"never"`` (or NaN/None). ``anticipation`` is the
+    number of periods before treatment onset in which outcomes may already
+    respond; those periods are treated as contaminated and excluded from the
+    clean pre-treatment placebo test, and the effective treatment start of
+    each cohort becomes ``group - anticipation``. ``cluster`` defaults to
+    the unit column; pass a higher-level cluster when errors are correlated
+    within it. The panel must be balanced: every unit observed in every
+    period exactly once.
+    """
+
+    outcome: str
+    unit: str
+    time: str
+    group: str
+    anticipation: int = 0
+    cluster: str | None = None
+    alpha: float = 0.05
+
+    def __post_init__(self) -> None:
+        """Validate the declaration."""
+        for field_name, value in (
+            ("outcome", self.outcome),
+            ("unit", self.unit),
+            ("time", self.time),
+            ("group", self.group),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if self.cluster is not None and (
+            not isinstance(self.cluster, str) or not self.cluster.strip()
+        ):
+            raise ValueError("cluster must be a non-empty string or None")
+        labels = {
+            self.outcome,
+            self.unit,
+            self.time,
+            self.group,
+            *((self.cluster,) if self.cluster else ()),
+        }
+        if len(labels) != 4 + (1 if self.cluster else 0):
+            raise ValueError("column names must be unique")
+        if isinstance(self.anticipation, bool) or not isinstance(
+            self.anticipation, int
+        ):
+            raise ValueError(
+                f"anticipation must be a non-negative integer, "
+                f"got {self.anticipation!r}"
+            )
+        if self.anticipation < 0:
+            raise ValueError(
+                f"anticipation must be non-negative, got {self.anticipation}"
+            )
+        if not isfinite(self.alpha) or not 0.0 < self.alpha < 1.0:
+            raise ValueError(f"alpha must be in (0, 1), got {self.alpha}")
+
+    def fit(self, data: pd.DataFrame) -> StaggeredDidResult:
+        """Estimate group-time ATTs and their aggregations."""
+        return _fit_staggered_did(self, data)
+
+
+def _fit_staggered_did(
+    spec: CallawaySantAnna,
+    data: pd.DataFrame,
+) -> StaggeredDidResult:
+    """Run panel validation and the joint group-time ATT estimation."""
+    declared = [
+        spec.outcome,
+        spec.unit,
+        spec.time,
+        spec.group,
+        *((spec.cluster,) if spec.cluster else ()),
+    ]
+    missing = [column for column in declared if column not in data.columns]
+    if missing:
+        raise ValueError(f"missing panel columns: {', '.join(missing)}")
+    periods = _ordered_periods(data[spec.time])
+    period_index = _period_index(data[spec.time], periods)
+    outcome = pd.to_numeric(data[spec.outcome], errors="coerce").to_numpy(
+        dtype=float
+    )
+    if np.isnan(outcome).any():
+        raise ValueError(
+            f"outcome column {spec.outcome!r} contains missing or "
+            "non-numeric values"
+        )
+    unit_ids = data[spec.unit].to_numpy()
+    _validate_balanced_panel(data, spec, periods)
+    group_index = _parse_groups(data[spec.group], periods)
+    cluster_ids = (
+        data[spec.cluster].to_numpy() if spec.cluster is not None else unit_ids
+    )
+    _validate_unit_constants(unit_ids, group_index, cluster_ids)
+    unique_clusters = np.unique(cluster_ids)
+    if len(unique_clusters) < 3:
+        raise ValueError(
+            "cluster-robust inference requires at least 3 clusters, "
+            f"got {len(unique_clusters)}"
+        )
+
+    unit_values, unit_inverse = np.unique(unit_ids, return_inverse=True)
+    unit_count = len(unit_values)
+    period_count = len(periods)
+    anticipation = spec.anticipation
+    unit_group = np.full(unit_count, -1, dtype=int)
+    for unit in range(unit_count):
+        unit_group[unit] = group_index[unit_inverse == unit][0]
+    unit_cluster = np.full(unit_count, -1, dtype=int)
+    cluster_lookup = {
+        cluster: index for index, cluster in enumerate(unique_clusters)
+    }
+    for unit in range(unit_count):
+        unit_cluster[unit] = cluster_lookup[
+            cluster_ids[unit_inverse == unit][0]
+        ]
+    group_sizes = {
+        int(group): int((unit_group == group).sum())
+        for group in np.unique(unit_group)
+    }
+
+    outcome_matrix = np.full((unit_count, period_count), np.nan)
+    for row in range(len(data)):
+        outcome_matrix[unit_inverse[row], period_index[row]] = outcome[row]
+
+    treated_groups = sorted(
+        int(group) for group in np.unique(unit_group) if group >= 0
+    )
+    if not treated_groups:
+        raise ValueError(
+            "no treated cohorts found; the group column must mark each "
+            "unit's first-treated period or 'never'"
+        )
+    usable_groups = [
+        group for group in treated_groups if group - anticipation - 1 >= 0
+    ]
+    dropped_groups = [
+        group for group in treated_groups if group - anticipation - 1 < 0
+    ]
+    warnings: list[str] = []
+    for group in dropped_groups:
+        warnings.append(
+            f"cohort treated in period {periods[group]!r} has no clean "
+            "pre-treatment base period after the anticipation window and "
+            "was dropped; its effects are not identified."
+        )
+    if not usable_groups:
+        raise ValueError(
+            "no cohort has a clean pre-treatment base period; treat later "
+            "or reduce the anticipation window"
+        )
+
+    cells: list[_AttCell] = []
+    for group in usable_groups:
+        base = group - anticipation - 1
+        treated_units = [
+            unit for unit in range(unit_count) if unit_group[unit] == group
+        ]
+        treated_set = set(treated_units)
+        for period in range(period_count):
+            if period == base:
+                # The base period is the reference: the difference is zero
+                # by construction and carries no identifying information.
+                continue
+            # Comparison units must be not-yet-treated at the current period
+            # AND at the base period: a cohort whose effective treatment
+            # starts inside (base, period] would contaminate its long
+            # difference through the base-period outcome.
+            effective_after = max(period, base) + anticipation
+            comparison_units = [
+                unit
+                for unit in range(unit_count)
+                if unit not in treated_set
+                and (
+                    unit_group[unit] == -1
+                    or unit_group[unit] > effective_after
+                )
+            ]
+            if len(treated_units) < 2 or len(comparison_units) < 2:
+                continue
+            cells.append(
+                _AttCell(
+                    group=group,
+                    period=period,
+                    base=base,
+                    treated=treated_units,
+                    comparison=comparison_units,
+                )
+            )
+    if not cells:
+        raise ValueError(
+            "no estimable (cohort, period) cells; every cohort lacks either "
+            "treated units or a not-yet-treated comparison group"
+        )
+
+    cell_count = len(cells)
+    cluster_count = len(unique_clusters)
+    # Each cell is a regression of the long difference (Y_t - Y_b) on a
+    # treated-unit indicator with an intercept, so the ATT is the slope:
+    # mean(treated) - mean(comparison). Stacking the cells gives a
+    # block-diagonal design; the cluster-robust sandwich over the blocks
+    # yields the joint covariance across all ATT(g, t) cells.
+    beta = np.zeros(cell_count)
+    counts = np.zeros(cell_count, dtype=int)
+    treated_counts = np.zeros(cell_count, dtype=int)
+    scores = np.zeros((cluster_count, cell_count, 2))
+    residuals_squared_sum = 0.0
+    for cell_index, cell in enumerate(cells):
+        sample_units = [*cell.treated, *cell.comparison]
+        y_diff = (
+            outcome_matrix[sample_units, cell.period]
+            - outcome_matrix[sample_units, cell.base]
+        )
+        treated_dummy = np.asarray(
+            [1.0] * len(cell.treated) + [0.0] * len(cell.comparison),
+            dtype=float,
+        )
+        design = np.column_stack([np.ones(len(sample_units)), treated_dummy])
+        coefficient, *_ = np.linalg.lstsq(design, y_diff, rcond=None)
+        beta[cell_index] = float(coefficient[1])
+        counts[cell_index] = len(sample_units)
+        treated_counts[cell_index] = len(cell.treated)
+        residual = y_diff - design @ coefficient
+        residuals_squared_sum += float(np.sum(residual**2))
+        for offset, unit in enumerate(sample_units):
+            scores[unit_cluster[unit], cell_index, 0] += residual[offset]
+            scores[unit_cluster[unit], cell_index, 1] += (
+                treated_dummy[offset] * residual[offset]
+            )
+
+    stacked_rows = int(counts.sum())
+    xtx_inverse = np.zeros((cell_count, 2, 2))
+    for cell_index in range(cell_count):
+        block = np.asarray(
+            [
+                [counts[cell_index], treated_counts[cell_index]],
+                [treated_counts[cell_index], treated_counts[cell_index]],
+            ],
+            dtype=float,
+        )
+        xtx_inverse[cell_index] = np.linalg.inv(block)
+    correction = (cluster_count / (cluster_count - 1)) * (
+        (stacked_rows - 1) / (stacked_rows - 2 * cell_count)
+    )
+    # Joint covariance of the ATT slopes: each cell contributes its
+    # intercept row dropped via a_c = [0, 1] XtX_inv_c.
+    covariance = np.zeros((cell_count, cell_count))
+    for row_cell in range(cell_count):
+        a_row = xtx_inverse[row_cell][1]
+        for column_cell in range(cell_count):
+            block_sum = np.zeros((2, 2))
+            for cluster in range(cluster_count):
+                block_sum += np.outer(
+                    scores[cluster, row_cell], scores[cluster, column_cell]
+                )
+            covariance[row_cell, column_cell] = (
+                a_row @ block_sum @ xtx_inverse[column_cell][1]
+            )
+    covariance *= correction
+    sigma_squared = residuals_squared_sum / (stacked_rows - 2 * cell_count)
+    naive_variance = sigma_squared * np.asarray(
+        [xtx_inverse[cell_index][1, 1] for cell_index in range(cell_count)],
+        dtype=float,
+    )
+    degrees_of_freedom = float(cluster_count - 2)
+    ci_level = 1.0 - spec.alpha
+
+    group_time_atts = tuple(
+        GroupTimeAtt(
+            group=periods[cell.group],
+            period=periods[cell.period],
+            relative_time=cell.period - cell.group,
+            att=float(beta[index]),
+            standard_error=float(np.sqrt(max(covariance[index, index], 0.0))),
+            ci_lower=float(
+                beta[index]
+                - _t_critical(ci_level, degrees_of_freedom)
+                * np.sqrt(max(covariance[index, index], 0.0))
+            ),
+            ci_upper=float(
+                beta[index]
+                + _t_critical(ci_level, degrees_of_freedom)
+                * np.sqrt(max(covariance[index, index], 0.0))
+            ),
+            p_value=float(
+                2.0
+                * stats.t.sf(
+                    abs(beta[index])
+                    / np.sqrt(max(covariance[index, index], 0.0)),
+                    degrees_of_freedom,
+                )
+            ),
+            n_treated=len(cell.treated),
+            n_comparison=len(cell.comparison),
+        )
+        for index, cell in enumerate(cells)
+    )
+
+    requested_cells = sum(
+        period_count - 1 for _ in usable_groups
+    )  # one reference (base) period per cohort is not estimable
+    skipped_cells = requested_cells - cell_count
+    if skipped_cells > 0:
+        warnings.append(
+            f"{skipped_cells} (cohort, period) cell(s) were skipped because "
+            "no usable not-yet-treated comparison group exists."
+        )
+    if not any(cell.period >= cell.group for cell in cells):
+        warnings.append(
+            "no post-treatment cells were estimable; every reported ATT is "
+            "a pre-treatment placebo."
+        )
+
+    group_atts = _group_aggregations(
+        cells,
+        beta,
+        covariance,
+        degrees_of_freedom,
+        ci_level,
+        group_sizes,
+        periods,
+    )
+    calendar_atts = _calendar_aggregations(
+        cells,
+        beta,
+        covariance,
+        degrees_of_freedom,
+        ci_level,
+        group_sizes,
+        periods,
+    )
+    event_time_atts = _event_time_aggregations(
+        cells, beta, covariance, degrees_of_freedom, ci_level, group_sizes
+    )
+    overall = _overall_aggregation(
+        cells,
+        beta,
+        covariance,
+        naive_variance,
+        degrees_of_freedom,
+        ci_level,
+        group_sizes,
+    )
+    placebo = _placebo_test(cells, beta, covariance, anticipation)
+    if placebo is not None and placebo.p_value <= spec.alpha:
+        warnings.append(
+            "parallel-trends placebo test fails: clean pre-treatment cells "
+            f"are jointly nonzero (p={placebo.p_value:.6g})."
+        )
+    status = "warning" if warnings else "ok"
+    return StaggeredDidResult(
+        method="callaway_santanna",
+        anticipation=anticipation,
+        comparison="not-yet-treated",
+        units=unit_count,
+        clusters=cluster_count,
+        periods=period_count,
+        ci_level=ci_level,
+        group_labels=tuple(periods[group] for group in usable_groups),
+        period_labels=periods,
+        group_time_atts=group_time_atts,
+        group_atts=group_atts,
+        calendar_atts=calendar_atts,
+        event_time_atts=event_time_atts,
+        overall_att=overall,
+        placebo=placebo,
+        assumption_notes=_CS_ASSUMPTION_NOTES,
+        warnings=tuple(warnings),
+        status=status,
+    )
+
+
+def _validate_balanced_panel(
+    data: pd.DataFrame,
+    spec: CallawaySantAnna,
+    periods: tuple[str, ...],
+) -> None:
+    """Raise unless every unit appears in every period exactly once."""
+    counts = data.groupby([spec.unit, spec.time], sort=False).size()
+    if int((counts != 1).sum()):
+        raise ValueError(
+            "balanced panel required: each unit must appear exactly once "
+            "in every period"
+        )
+    per_unit = counts.groupby(level=0, sort=False).size()
+    if int((per_unit != len(periods)).sum()):
+        raise ValueError(
+            "balanced panel required: every unit must be observed in every "
+            "period"
+        )
+
+
+def _parse_groups(series: pd.Series, periods: tuple[str, ...]) -> np.ndarray:
+    """Map group values to first-treated period indices (-1 for never)."""
+    period_lookup = {label: index for index, label in enumerate(periods)}
+    parsed: list[int] = []
+    for value in series:
+        if pd.isna(value) or str(value) == "never":
+            parsed.append(-1)
+            continue
+        label = str(value)
+        if label not in period_lookup:
+            raise ValueError(
+                f"group value {label!r} is not a period label or 'never'"
+            )
+        parsed.append(period_lookup[label])
+    return np.asarray(parsed, dtype=int)
+
+
+def _validate_unit_constants(
+    unit_ids: np.ndarray,
+    group_index: np.ndarray,
+    cluster_ids: np.ndarray,
+) -> None:
+    """Raise when group or cluster status varies within a unit."""
+    frame = pd.DataFrame(
+        {"unit": unit_ids, "group": group_index, "cluster": cluster_ids}
+    )
+    for column in ("group", "cluster"):
+        per_unit = frame.groupby("unit", sort=False)[column].nunique()
+        if int(per_unit.max()) > 1:
+            raise ValueError(
+                f"{column} status changes within a unit; staggered DiD "
+                "requires time-constant cohort and cluster assignment"
+            )
+
+
+def _t_critical(ci_level: float, degrees_of_freedom: float) -> float:
+    """Two-sided t critical value for a confidence level."""
+    return float(stats.t.ppf((1.0 + ci_level) / 2.0, degrees_of_freedom))
+
+
+def _cell_se(covariance: np.ndarray, index: int) -> float:
+    """Non-negative standard error for one cell."""
+    return float(np.sqrt(max(covariance[index, index], 0.0)))
+
+
+def _aggregation_weights(
+    cells: list[_AttCell],
+    group_sizes: dict[int, int],
+    period_count: int,
+) -> dict[str, Any]:
+    """Return linear-combination weight vectors for each aggregation."""
+    cell_count = len(cells)
+    group_weights: dict[int, np.ndarray] = {
+        group: np.zeros(cell_count) for group in group_sizes if group >= 0
+    }
+    calendar_weights = [np.zeros(cell_count) for _ in range(period_count)]
+    event_weights: dict[int, np.ndarray] = {}
+    overall = np.zeros(cell_count)
+    for index, cell in enumerate(cells):
+        group = cell.group
+        period = cell.period
+        relative = period - group
+        size = float(group_sizes[group])
+        if period >= group:
+            group_weights[group][index] = 1.0
+            if period < len(calendar_weights):
+                calendar_weights[period][index] = size
+            overall[index] = size
+        event_weights.setdefault(relative, np.zeros(cell_count))[index] = size
+    for group in group_weights:
+        total = float(group_weights[group].sum())
+        if total > 0.0:
+            group_weights[group] /= total
+    for period in range(period_count):
+        total = float(calendar_weights[period].sum())
+        if total > 0.0:
+            calendar_weights[period] /= total
+    for relative in event_weights:
+        total = float(event_weights[relative].sum())
+        if total > 0.0:
+            event_weights[relative] /= total
+    total = float(overall.sum())
+    if total > 0.0:
+        overall /= total
+    return {
+        "group": group_weights,
+        "calendar": calendar_weights,
+        "event": event_weights,
+        "overall": overall,
+    }
+
+
+def _linear_combination(
+    weights: np.ndarray,
+    beta: np.ndarray,
+    covariance: np.ndarray,
+    degrees_of_freedom: float,
+    ci_level: float,
+) -> tuple[float, float, float, float, float]:
+    """Return (att, se, ci_lower, ci_upper, p_value)."""
+    att = float(weights @ beta)
+    variance = float(weights @ covariance @ weights)
+    standard_error = float(np.sqrt(max(variance, 0.0)))
+    critical = _t_critical(ci_level, degrees_of_freedom)
+    margin = critical * standard_error
+    p_value = float(
+        2.0 * stats.t.sf(abs(att) / standard_error, degrees_of_freedom)
+    )
+    return att, standard_error, att - margin, att + margin, p_value
+
+
+def _group_aggregations(
+    cells: list[_AttCell],
+    beta: np.ndarray,
+    covariance: np.ndarray,
+    degrees_of_freedom: float,
+    ci_level: float,
+    group_sizes: dict[int, int],
+    periods: tuple[str, ...],
+) -> tuple[GroupAtt, ...]:
+    """Simple average over each cohort's post-treatment cells."""
+    weights = _aggregation_weights(cells, group_sizes, len(periods))["group"]
+    results: list[GroupAtt] = []
+    for group, vector in weights.items():
+        if float(vector.sum()) == 0.0:
+            continue
+        att, se, lower, upper, p_value = _linear_combination(
+            vector, beta, covariance, degrees_of_freedom, ci_level
+        )
+        post_count = int((vector > 0).sum())
+        results.append(
+            GroupAtt(
+                group=periods[group],
+                att=att,
+                standard_error=se,
+                ci_lower=lower,
+                ci_upper=upper,
+                p_value=p_value,
+                units=group_sizes[group],
+                post_periods=post_count,
+            )
+        )
+    return tuple(results)
+
+
+def _calendar_aggregations(
+    cells: list[_AttCell],
+    beta: np.ndarray,
+    covariance: np.ndarray,
+    degrees_of_freedom: float,
+    ci_level: float,
+    group_sizes: dict[int, int],
+    periods: tuple[str, ...],
+) -> tuple[CalendarAtt, ...]:
+    """Size-weighted ATT per calendar period over cohorts treated by then."""
+    weights = _aggregation_weights(cells, group_sizes, len(periods))[
+        "calendar"
+    ]
+    results: list[CalendarAtt] = []
+    for period, vector in enumerate(weights):
+        if float(vector.sum()) == 0.0:
+            continue
+        att, se, lower, upper, p_value = _linear_combination(
+            vector, beta, covariance, degrees_of_freedom, ci_level
+        )
+        results.append(
+            CalendarAtt(
+                period=periods[period],
+                att=att,
+                standard_error=se,
+                ci_lower=lower,
+                ci_upper=upper,
+                p_value=p_value,
+            )
+        )
+    return tuple(results)
+
+
+def _event_time_aggregations(
+    cells: list[_AttCell],
+    beta: np.ndarray,
+    covariance: np.ndarray,
+    degrees_of_freedom: float,
+    ci_level: float,
+    group_sizes: dict[int, int],
+) -> tuple[EventTimeAtt, ...]:
+    """Size-weighted ATT by distance from treatment onset."""
+    weights = _aggregation_weights(cells, group_sizes, 0)["event"]
+    results: list[EventTimeAtt] = []
+    for relative, vector in sorted(weights.items()):
+        if float(vector.sum()) == 0.0:
+            continue
+        att, se, lower, upper, p_value = _linear_combination(
+            vector, beta, covariance, degrees_of_freedom, ci_level
+        )
+        results.append(
+            EventTimeAtt(
+                relative_time=relative,
+                att=att,
+                standard_error=se,
+                ci_lower=lower,
+                ci_upper=upper,
+                p_value=p_value,
+            )
+        )
+    return tuple(results)
+
+
+def _overall_aggregation(
+    cells: list[_AttCell],
+    beta: np.ndarray,
+    covariance: np.ndarray,
+    naive_variance: np.ndarray,
+    degrees_of_freedom: float,
+    ci_level: float,
+    group_sizes: dict[int, int],
+) -> OverallAtt:
+    """Size-weighted ATT over all post cells with robust and naive SEs."""
+    weights = _aggregation_weights(cells, group_sizes, 0)["overall"]
+    att, se, lower, upper, p_value = _linear_combination(
+        weights, beta, covariance, degrees_of_freedom, ci_level
+    )
+    # naive_variance is the per-cell (diagonal) OLS variance; the aggregate
+    # naive variance is the size-weighted sum of the squared weights.
+    naive_variance_total = float(np.sum(weights**2 * naive_variance))
+    naive_se = float(np.sqrt(max(naive_variance_total, 0.0)))
+    return OverallAtt(
+        att=att,
+        standard_error=se,
+        naive_standard_error=naive_se,
+        ci_lower=lower,
+        ci_upper=upper,
+        p_value=p_value,
+    )
+
+
+def _placebo_test(
+    cells: list[_AttCell],
+    beta: np.ndarray,
+    covariance: np.ndarray,
+    anticipation: int,
+) -> PlaceboTest | None:
+    """Joint Wald test that clean pre-treatment cells are zero."""
+    pre_indices = [
+        index
+        for index, cell in enumerate(cells)
+        if cell.period < cell.group - anticipation
+    ]
+    if not pre_indices:
+        return None
+    pre_beta = np.asarray([beta[index] for index in pre_indices], dtype=float)
+    block = covariance[np.ix_(pre_indices, pre_indices)]
+    try:
+        inverse = np.linalg.inv(block)
+    except np.linalg.LinAlgError:
+        inverse = np.linalg.pinv(block)
+    statistic = float(pre_beta @ inverse @ pre_beta)
+    if not np.isfinite(statistic):
+        return None
+    return PlaceboTest(
+        statistic=statistic,
+        degrees_of_freedom=len(pre_indices),
+        p_value=float(stats.chi2.sf(statistic, len(pre_indices))),
+        cells=len(pre_indices),
+    )
+
+
+def render_staggered_did_markdown(result: StaggeredDidResult) -> str:
+    """Render a staggered-adoption DiD result as Markdown."""
+    lines = [
+        "# Staggered-Adoption Difference-in-Differences "
+        "(Callaway & Sant'Anna)",
+        "",
+        f"- **Method**: {result.method}",
+        f"- **Anticipation**: {result.anticipation} period(s)",
+        f"- **Comparison group**: {result.comparison}",
+        f"- **Units**: {result.units} across {result.periods} periods; "
+        f"**clusters**: {result.clusters}",
+        f"- **{result.ci_level * 100.0:.0f}% level across group-time ATTs",
+        "",
+        "## Group-time ATT(g, t)",
+        "",
+        "| Group | Period | Relative time | ATT | SE | CI | p-value |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for cell in result.group_time_atts:
+        lines.append(
+            f"| {cell.group} | {cell.period} | {cell.relative_time:+d} | "
+            f"{cell.att:.4f} | {cell.standard_error:.4f} | "
+            f"[{cell.ci_lower:.4f}, {cell.ci_upper:.4f}] | "
+            f"{cell.p_value:.4f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## ATT by adoption group",
+            "",
+            "| Group | ATT | SE | CI | p-value | units | post |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    )
+    for group in result.group_atts:
+        lines.append(
+            f"| {group.group} | {group.att:.4f} | {group.standard_error:.4f} "
+            f"| [{group.ci_lower:.4f}, {group.ci_upper:.4f}] | "
+            f"{group.p_value:.4f} | {group.units} | {group.post_periods} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Calendar-time ATT",
+            "",
+            "| Period | ATT | SE | CI | p-value |",
+            "|---|---|---|---|---|",
+        ]
+    )
+    for period in result.calendar_atts:
+        lines.append(
+            f"| {period.period} | {period.att:.4f} | "
+            f"{period.standard_error:.4f} | "
+            f"[{period.ci_lower:.4f}, {period.ci_upper:.4f}] | "
+            f"{period.p_value:.4f} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Event-time ATT (relative to treatment)",
+            "",
+            "| Time | ATT | SE | CI | p-value |",
+            "|---|---|---|---|---|",
+        ]
+    )
+    for event in result.event_time_atts:
+        lines.append(
+            f"| {event.relative_time:+d} | {event.att:.4f} | "
+            f"{event.standard_error:.4f} | "
+            f"[{event.ci_lower:.4f}, {event.ci_upper:.4f}] | "
+            f"{event.p_value:.4f} |"
+        )
+    overall = result.overall_att
+    lines.extend(
+        [
+            "",
+            "## Overall ATT",
+            "",
+            f"- **ATT**: {overall.att:.4f} "
+            f"(SE {overall.standard_error:.4f}, "
+            f"naive {overall.naive_standard_error:.4f})",
+            f"- **{result.ci_level * 100.0:.0f}% CI**: "
+            f"[{overall.ci_lower:.4f}, {overall.ci_upper:.4f}]",
+            f"- **p-value**: {overall.p_value:.4f}",
+        ]
+    )
+    if result.placebo is not None:
+        lines.extend(
+            [
+                "",
+                "## Parallel-trends placebo (pre-treatment cells)",
+                "",
+                f"- Joint chi-square {result.placebo.statistic:.4f} on "
+                f"{result.placebo.degrees_of_freedom} df "
+                f"({result.placebo.cells} cells); "
+                f"p = {result.placebo.p_value:.4f}",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "## Parallel-trends placebo",
+                "",
+                "- Not estimable: no clean pre-treatment cells.",
+            ]
+        )
+    lines.extend(["", "## Identifying assumptions", ""])
     for note in result.assumption_notes:
         lines.append(f"- {note}")
     if result.warnings:

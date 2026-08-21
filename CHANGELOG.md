@@ -66,6 +66,15 @@ All notable changes to `twosample-means` are documented here.
 - Examples `10_difference_in_differences.py` (region-clustered store panel
   with event-study diagnostics) and `11_kaggle_manifest_adapter.py`
   (manifest-driven cache consumption with quality-flag handling).
+- Staggered-adoption DiD in the `quasi_experimental` namespace:
+  `CallawaySantAnna` estimates group-time ATT(g, t) against
+  not-yet-treated comparison units with a joint cluster-robust
+  covariance, supports anticipation windows that shift effective
+  treatment start, aggregates by group/calendar/event-time/overall, and
+  reports a parallel-trends placebo test on clean pre-treatment cells.
+  `render_staggered_did_markdown()` writes the report.
+- Example `15_staggered_adoption.py`: two-region staggered rollout with a
+  one-period anticipation window and region-clustered standard errors.
 - Documentation site via mkdocs (`docs/`, `mkdocs.yml`) with a `docs`
   optional extra; built in CI with `mkdocs build --strict`.
 - Stratified randomization support: `ExperimentConfig.strata` (CLI

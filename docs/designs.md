@@ -93,8 +93,34 @@ omitted as reference) and a joint parallel-trends placebo p-value on the
 pre-period coefficients. `render_did_markdown(result)` writes a report
 that lists the identifying assumptions explicitly.
 
-!!! note
+### Staggered adoption (Callaway & Sant'Anna)
 
-    Staggered-adoption designs and heterogeneous treatment effects
-    require dedicated estimators (for example Callaway & Sant'Anna);
-    the canonical estimator here intentionally rejects those designs.
+When regions or stores adopt treatment at different times, the canonical
+estimator rejects the design; use `CallawaySantAnna` instead:
+
+```python
+from twosample_means.quasi_experimental import CallawaySantAnna
+
+model = CallawaySantAnna(
+    outcome="revenue",
+    unit="store_id",
+    time="period",
+    group="cohort",       # first-treated period, or "never"
+    anticipation=1,        # outcomes may respond one period early
+    cluster="region",
+)
+result = model.fit(dataframe)
+```
+
+The `cohort` column holds each unit's first-treated period label, with
+never-treated units marked `"never"` (or NaN). The panel must be
+balanced (every unit in every period exactly once). The estimator
+reports the group-time ATT(g, t) matrix against not-yet-treated
+comparison units, aggregates by group, calendar time, and event time,
+and runs a joint parallel-trends placebo test on the clean
+pre-treatment cells (those outside the declared anticipation window).
+The `anticipation` parameter shifts each cohort's effective treatment
+start backward, so anticipated responses show up at relative time
+`-anticipation` instead of contaminating the placebo.
+
+`render_staggered_did_markdown(result)` writes the full report.

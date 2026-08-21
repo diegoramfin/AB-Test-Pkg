@@ -19,13 +19,19 @@ accept/reject decision. This is the strongest anti-p-hacking stance.
 __version__ = "0.2.0"
 
 from twosample_means.quasi_experimental import (
+    CallawaySantAnna,
     DidResult,
     DifferenceInDifferences,
+    StaggeredDidResult,
     render_did_markdown,
+    render_staggered_did_markdown,
 )
 
 __all__ = [
+    "CallawaySantAnna",
     "DifferenceInDifferences",
     "DidResult",
+    "StaggeredDidResult",
     "render_did_markdown",
+    "render_staggered_did_markdown",
 ]

@@ -342,7 +342,11 @@ nominal `ci_lower`/`ci_upper` fields remain available alongside
   cluster-robust standard errors, panel and treatment-timing validation,
   event-study coefficients, and a parallel-trends placebo test.
   `render_did_markdown()` writes a report that lists the identifying
-  assumptions explicitly.
+  assumptions explicitly. `CallawaySantAnna` extends the namespace to
+  staggered adoption with not-yet-treated comparison units: group-time
+  ATT(g, t) cells, optional anticipation windows, group/calendar/
+  event-time/overall aggregation, and a parallel-trends placebo test on
+  the clean pre-treatment cells.
 
 ## Examples
 
@@ -384,6 +388,9 @@ uv run python examples/01_binary_conversion.py artifacts/examples/conversion
   entirely through `twosample-means experiment` with `--cluster`,
   `--strata`, and `--balance-columns` on a generated CSV, proving the
   flags work end-to-end from the terminal.
+- `15_staggered_adoption.py` — staggered regional rollout analyzed with
+  Callaway & Sant'Anna group-time ATTs, a one-period anticipation
+  window, and region-clustered standard errors.
 
 Experiment JSON reports use the bundled `experiment-result-v1` JSON Schema.
 The schema is versioned independently from the Python package release.

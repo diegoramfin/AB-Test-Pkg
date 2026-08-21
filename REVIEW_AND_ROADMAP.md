@@ -477,6 +477,9 @@ Delivered scripts (each smoke-tested in CI and writing to an ignored
     driven entirely through `twosample-means experiment` with
     `--cluster`, `--strata`, and `--balance-columns` on a generated CSV,
     proving the flags reach the analysis end-to-end.
+15. `examples/15_staggered_adoption.py` — staggered regional rollout
+    analyzed with Callaway & Sant'Anna group-time ATTs, a one-period
+    anticipation window, and region-clustered standard errors.
 
 ## Recommended project layout
 
@@ -633,8 +636,10 @@ baseline. Coverage should support statistical validation, not replace it.
 ### Remaining ideas (future-oriented, not open gaps)
 
 - [ ] Plugin interface for custom estimators and metrics.
-- [ ] Staggered-adoption DiD estimators (for example Callaway & Sant'Anna)
-  and sensitivity/anticipation windows.
+- [x] Staggered-adoption DiD estimators (Callaway & Sant'Anna) with
+  not-yet-treated comparison units, anticipation windows, group-time
+  ATT(g, t) cells, group/calendar/event-time/overall aggregation, and a
+  parallel-trends placebo test on clean pre-treatment cells.
 - [ ] Confidence-sequence variants: empirical-Bernstein and e-value modes.
 - [ ] Gallery of reproducible case studies on the docs site.
 
