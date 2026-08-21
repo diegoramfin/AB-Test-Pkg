@@ -21,13 +21,24 @@ from .continuous import (
     estimate_continuous_metric,
 )
 from .count import estimate_count_metric
-from .cuped import CupedMetricResult, CupedSummary, estimate_cuped_metric
+from .cuped import (
+    CupedMetricResult,
+    CupedSummary,
+    estimate_ancova_metric,
+    estimate_cuped_metric,
+)
 from .data import (
     NormalizedExperimentData,
     load_separate_experiment_csvs,
     normalize_experiment_data,
 )
-from .diagnostics import AssignmentDiagnostics, diagnose_assignment
+from .diagnostics import (
+    BALANCE_SMD_THRESHOLD,
+    AssignmentDiagnostics,
+    CovariateBalance,
+    StratumSrm,
+    diagnose_assignment,
+)
 from .multiplicity import (
     adjust_p_values,
     apply_multiplicity,
@@ -37,15 +48,24 @@ from .power import PowerResult, PowerSpec, estimate_mde, simulate_power
 from .ratio import RatioMetricResult, RatioSummary, estimate_ratio_metric
 from .results import ExperimentResult
 from .sequential import (
+    ConfidenceSequence,
+    ConfidenceSequenceInterval,
     SequentialBoundary,
     SequentialPlan,
+    SequentialPowerResult,
     SequentialResult,
     alpha_spending_boundaries,
+    always_valid_confidence_sequence,
+    difference_confidence_sequence,
     evaluate_sequential,
+    sequential_power,
 )
 
 __all__ = [
     "AssignmentDiagnostics",
+    "BALANCE_SMD_THRESHOLD",
+    "CovariateBalance",
+    "StratumSrm",
     "ExperimentResult",
     "ContrastSpec",
     "RatioMetricResult",
@@ -54,7 +74,13 @@ __all__ = [
     "PowerSpec",
     "SequentialBoundary",
     "SequentialPlan",
+    "SequentialPowerResult",
     "SequentialResult",
+    "ConfidenceSequence",
+    "ConfidenceSequenceInterval",
+    "always_valid_confidence_sequence",
+    "difference_confidence_sequence",
+    "sequential_power",
     "BinaryMetricResult",
     "BinarySummary",
     "ContinuousMetricResult",
@@ -67,6 +93,7 @@ __all__ = [
     "estimate_count_metric",
     "estimate_ratio_metric",
     "estimate_cuped_metric",
+    "estimate_ancova_metric",
     "estimate_clustered_metric",
     "CupedMetricResult",
     "CupedSummary",

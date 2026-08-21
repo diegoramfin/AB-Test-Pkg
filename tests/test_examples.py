@@ -15,6 +15,19 @@ import pytest
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
+# Summary-style examples write a text report instead of an experiment
+# report; the value is (filename, expected substring). Everything else
+# writes report.md/json/html.
+SUMMARY_FILES = {
+    "04_planning_power_sequential": ("planning.txt", "calibrated"),
+    "09_sequential_analysis": ("sequential.txt", "calibrated"),
+    "10_difference_in_differences": (
+        "did_report.md",
+        "difference-in-differences",
+    ),
+    "11_kaggle_manifest_adapter": ("kaggle_adapter.txt", "manifest"),
+}
+
 
 @pytest.mark.parametrize(
     "module_name",
@@ -24,6 +37,13 @@ EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
         "03_count_ratio",
         "04_planning_power_sequential",
         "05_clustered_ratio",
+        "06_holm_multiplicity",
+        "07_multi_arm_contrasts",
+        "08_separate_csvs",
+        "09_sequential_analysis",
+        "10_difference_in_differences",
+        "11_kaggle_manifest_adapter",
+        "12_stratified_balance",
     ],
 )
 def test_example_runs_to_completion(
@@ -40,10 +60,11 @@ def test_example_runs_to_completion(
         sys.path.remove(str(EXAMPLES))
 
     assert output.exists()
-    if module_name == "04_planning_power_sequential":
-        summary = output / "planning.txt"
+    if module_name in SUMMARY_FILES:
+        summary_name, expected = SUMMARY_FILES[module_name]
+        summary = output / summary_name
         assert summary.exists()
-        assert "calibrated" in summary.read_text(encoding="utf-8").lower()
+        assert expected in summary.read_text(encoding="utf-8").lower()
     else:
         assert (output / "report.md").exists()
         assert (output / "report.json").exists()
@@ -56,4 +77,31 @@ def test_example_runs_to_completion(
         assert diagnostics["sample_ratio_mismatch_evaluated"] is True
         assert diagnostics["sample_ratio_mismatch_p_value"] is not None
         assert "not evaluated" not in " ".join(diagnostics["warnings"])
+    if module_name == "06_holm_multiplicity":
+        # The point of this example is an active correction: the primary
+        # metric's Holm-adjusted p-value must exceed its raw value.
+        metrics = json.loads(
+            (output / "report.json").read_text(encoding="utf-8")
+        )["metrics"]
+        primary = metrics[0]
+        assert primary["adjusted_p_value"] > primary["p_value"]
+    if module_name == "12_stratified_balance":
+        # The point of this example is the offsetting per-stratum
+        # imbalance: marginal SRM passes while every stratum fails.
+        diagnostics = json.loads(
+            (output / "report.json").read_text(encoding="utf-8")
+        )["assignment_diagnostics"]
+        assert diagnostics["sample_ratio_mismatch_p_value"] == pytest.approx(
+            1.0
+        )
+        assert len(diagnostics["stratum_srm"]) == 2
+        assert all(
+            entry["p_value"] is not None and entry["p_value"] < 0.05
+            for entry in diagnostics["stratum_srm"]
+        )
+        assert len(diagnostics["covariate_balance"]) == 2
+        assert any(
+            entry["exceeds_threshold"]
+            for entry in diagnostics["covariate_balance"]
+        )
     assert capsys.readouterr().out != ""

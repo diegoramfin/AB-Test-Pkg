@@ -172,6 +172,152 @@ def test_covariate_must_differ_from_metric_column() -> None:
         )
 
 
+def test_ancova_recovers_treatment_coefficient() -> None:
+    """ANCOVA reports the treatment coefficient with the declared method."""
+    rng = np.random.default_rng(3)
+    n = 400
+    covariate = rng.normal(0.0, 1.0, size=n)
+    arm = np.array([0] * (n // 2) + [1] * (n // 2))
+    outcome = 2.0 * covariate + 0.5 * arm + rng.normal(0.0, 0.3, size=n)
+    data = pd.DataFrame(
+        {
+            "user_id": range(n),
+            "variant": np.where(arm == 1, "treatment", "control"),
+            "pre_score": covariate,
+            "outcome": outcome,
+        }
+    )
+    config = ExperimentConfig(
+        experiment_id="ancova",
+        unit_id="user_id",
+        assignment="variant",
+        control="control",
+        treatments=("treatment",),
+        metrics=(
+            MetricSpec(
+                "outcome",
+                "outcome",
+                "continuous",
+                role="primary",
+                covariate="pre_score",
+                covariate_method="ancova",
+            ),
+        ),
+    )
+    metric = analyze_experiment(data, config).metrics[0]
+    assert isinstance(metric, CupedMetricResult)
+    assert metric.method == "ancova"
+    assert metric.status == "ok"
+    assert metric.absolute_effect == pytest.approx(0.5, abs=0.1)
+    assert metric.theta == pytest.approx(2.0, abs=0.1)
+    assert metric.standard_error is not None and metric.standard_error > 0.0
+    assert (
+        metric.variance_reduction is not None
+        and metric.variance_reduction > 0.0
+    )
+
+
+def test_ancova_interaction_allows_arm_specific_slopes() -> None:
+    """The interaction variant recovers the effect at the mean covariate."""
+    covariate = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    data = pd.DataFrame(
+        {
+            "user_id": range(12),
+            "variant": ["control"] * 6 + ["treatment"] * 6,
+            "pre_score": np.concatenate([covariate, covariate]),
+            "outcome": np.concatenate([covariate, 3.0 * covariate + 1.0]),
+        }
+    )
+    config = ExperimentConfig(
+        experiment_id="interaction",
+        unit_id="user_id",
+        assignment="variant",
+        control="control",
+        treatments=("treatment",),
+        metrics=(
+            MetricSpec(
+                "outcome",
+                "outcome",
+                "continuous",
+                role="primary",
+                covariate="pre_score",
+                covariate_method="interaction",
+            ),
+        ),
+    )
+    metric = analyze_experiment(data, config).metrics[0]
+    assert isinstance(metric, CupedMetricResult)
+    assert metric.method == "ancova_interaction"
+    assert metric.absolute_effect == pytest.approx(8.0)
+    assert metric.theta == pytest.approx(1.0)
+    assert metric.unadjusted_absolute_effect == pytest.approx(8.0)
+
+
+def test_ancova_rejects_unknown_covariate_method() -> None:
+    """Invalid covariate methods fail at configuration time."""
+    with pytest.raises(ValueError, match="covariate_method"):
+        MetricSpec(
+            "revenue",
+            "revenue",
+            "continuous",
+            covariate="pre_spend",
+            covariate_method="mixed",  # type: ignore[arg-type]
+        )
+
+
+def test_covariate_method_requires_a_covariate() -> None:
+    """A covariate method without a covariate column is rejected."""
+    with pytest.raises(ValueError, match="requires a declared covariate"):
+        MetricSpec(
+            "revenue",
+            "revenue",
+            "continuous",
+            covariate_method="ancova",
+        )
+
+
+def test_ancova_not_estimable_on_constant_covariate() -> None:
+    """Constant covariates produce a structured unavailable result."""
+    data = pd.DataFrame(
+        {
+            "user_id": range(8),
+            "variant": ["control"] * 4 + ["treatment"] * 4,
+            "pre_score": [1.0, 1.0, 1.0, 1.0] * 2,
+            "revenue": [1.0, 2.0, 3.0, 4.0] * 2,
+        }
+    )
+    config = ExperimentConfig(
+        experiment_id="flat",
+        unit_id="user_id",
+        assignment="variant",
+        control="control",
+        treatments=("treatment",),
+        metrics=(
+            MetricSpec(
+                "revenue",
+                "revenue",
+                "continuous",
+                role="primary",
+                covariate="pre_score",
+                covariate_method="ancova",
+            ),
+        ),
+    )
+    metric = analyze_experiment(data, config).metrics[0]
+    assert isinstance(metric, CupedMetricResult)
+    assert metric.status == "not_estimable"
+    assert "constant" in metric.warnings[0]
+
+
+def test_covariate_leakage_guard_is_reported() -> None:
+    """Covariate-adjusted reports carry the explicit timing guard."""
+    result = analyze_experiment(perfect_cuped_data(), cuped_config())
+    metric = result.metrics[0]
+    assert isinstance(metric, CupedMetricResult)
+    assert metric.covariate_leakage_guard is not None
+    assert "before treatment" in metric.covariate_leakage_guard
+
+
 def test_cuped_metric_joins_multiplicity_correction() -> None:
     """CUPED results are corrected like any other metric."""
     data = perfect_cuped_data()

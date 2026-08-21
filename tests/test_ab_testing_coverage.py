@@ -88,6 +88,99 @@ def test_binary_intervals_cover_null_and_non_null_rate_differences() -> None:
     assert min(coverages) >= COVERAGE_FLOOR
 
 
+def _clustered_continuous_config() -> ExperimentConfig:
+    """Build a cluster-robust continuous metric experiment plan."""
+    return ExperimentConfig(
+        experiment_id="clustered-continuous-coverage",
+        unit_id="user_id",
+        assignment="variant",
+        control="control",
+        treatments=("treatment",),
+        cluster="cluster_id",
+        metrics=(
+            MetricSpec(
+                name="outcome",
+                column="outcome",
+                kind="continuous",
+                role="primary",
+            ),
+        ),
+    )
+
+
+def _clustered_continuous_frame(
+    rng: np.random.Generator,
+    delta: float,
+    *,
+    clusters_per_arm: int = 12,
+    units_per_cluster: int = 10,
+) -> pd.DataFrame:
+    """Generate clustered outcomes with a known mean difference.
+
+    A shared within-cluster shift (sd 3.0 vs unit noise sd 1.0) creates
+    strong intra-cluster correlation; adding ``delta`` to every treatment
+    outcome makes the true treatment-minus-control mean difference exactly
+    ``delta``.
+    """
+    rows: list[dict[str, object]] = []
+    for cluster in range(clusters_per_arm * 2):
+        shift = rng.normal(0.0, 3.0)
+        arm = "control" if cluster % 2 == 0 else "treatment"
+        for unit in range(units_per_cluster):
+            rows.append(
+                {
+                    "user_id": f"{cluster}-{unit}",
+                    "variant": arm,
+                    "cluster_id": f"g{cluster}",
+                    "outcome": (
+                        shift
+                        + rng.normal(0.0, 1.0)
+                        + (delta if arm == "treatment" else 0.0)
+                    ),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def test_clustered_continuous_intervals_cover_known_mean_differences() -> None:
+    """Cluster-robust continuous intervals hold nominal coverage.
+
+    Strong within-cluster correlation inflates the outcome variance. The
+    cluster-robust interval must cover the known mean difference near the
+    nominal rate while the naive Welch interval systematically undercovers.
+    """
+    rng = np.random.default_rng(SEED)
+    config = _clustered_continuous_config()
+
+    for delta in (0.0, 0.5):
+        covered = 0
+        naive_covered = 0
+        for _ in range(CLUSTER_REPLICATES):
+            frame = _clustered_continuous_frame(rng, delta)
+            normalized = normalize_experiment_data(frame, config)
+            result = estimate_clustered_metric(
+                normalized, config, config.metrics[0]
+            )
+            assert result.ci_lower is not None
+            assert result.ci_upper is not None
+            assert result.naive_standard_error is not None
+            assert result.absolute_effect is not None
+            covered += result.ci_lower <= delta <= result.ci_upper
+            z = 1.959964
+            naive_lower = (
+                result.absolute_effect - z * result.naive_standard_error
+            )
+            naive_upper = (
+                result.absolute_effect + z * result.naive_standard_error
+            )
+            naive_covered += naive_lower <= delta <= naive_upper
+
+        robust_coverage = covered / CLUSTER_REPLICATES
+        naive_coverage = naive_covered / CLUSTER_REPLICATES
+        assert robust_coverage >= COVERAGE_FLOOR
+        assert naive_coverage < 0.80
+
+
 def _clustered_ratio_config() -> ExperimentConfig:
     """Build a cluster-robust ratio metric experiment plan."""
     return ExperimentConfig(

@@ -163,6 +163,47 @@ def test_planned_contrasts_support_multi_arm_comparisons() -> None:
     )
 
 
+def test_mixed_contrasts_with_arbitrary_comparison() -> None:
+    """Arbitrary contrasts coexist with implicit control contrasts.
+
+    Estimating an arbitrary contrast swaps the comparison control; the
+    remaining ``control=None`` contrasts must not re-resolve against the
+    swapped control and turn into self-comparisons.
+    """
+    data = pd.DataFrame(
+        {
+            "user_id": range(9),
+            "variant": ["control"] * 3 + ["a"] * 3 + ["b"] * 3,
+            "converted": [0, 0, 0, 1, 1, 1, 0, 1, 1],
+        }
+    )
+    config = ExperimentConfig(
+        experiment_id="mixed-contrasts",
+        unit_id="user_id",
+        assignment="variant",
+        control="control",
+        treatments=("a", "b"),
+        contrasts=(
+            ContrastSpec("a_vs_control", "a"),
+            ContrastSpec("b_vs_control", "b"),
+            ContrastSpec("b_vs_a", "b", control="a"),
+        ),
+        metrics=(
+            MetricSpec("conversion", "converted", "binary", role="primary"),
+        ),
+    )
+
+    result = analyze_experiment(data, config)
+
+    assert [metric.contrast_name for metric in result.metrics] == [
+        "a_vs_control",
+        "b_vs_control",
+        "b_vs_a",
+    ]
+    assert result.metrics[2].control_label == "a"
+    assert result.metrics[2].treatment_label == "b"
+
+
 def test_planned_arbitrary_contrast_reorients_control() -> None:
     """ContrastSpec can compare two treatment arms directly."""
     data = pd.DataFrame(

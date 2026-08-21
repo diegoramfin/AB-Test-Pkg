@@ -17,3 +17,15 @@ accept/reject decision. This is the strongest anti-p-hacking stance.
 """
 
 __version__ = "0.2.0"
+
+from twosample_means.quasi_experimental import (
+    DidResult,
+    DifferenceInDifferences,
+    render_did_markdown,
+)
+
+__all__ = [
+    "DifferenceInDifferences",
+    "DidResult",
+    "render_did_markdown",
+]

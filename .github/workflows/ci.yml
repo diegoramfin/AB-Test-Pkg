@@ -23,6 +23,11 @@ jobs:
       - run: uv run ruff check .
       - run: uv run mypy src/twosample_means tests
       - run: uv run pytest --cov --cov-report=term-missing
+      - name: Verify coverage badge is current
+        if: matrix.python-version == '3.12'
+        run: |
+          uv run coverage-badge -o coverage.svg -f
+          git diff --exit-code coverage.svg
       - run: uv build
       - name: Smoke-test built wheel
         run: |

@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import cast
 
 import numpy as np
 import pandas as pd
 
+from twosample_means import __version__
 from twosample_means.ab_testing import (
     ExperimentConfig,
     MetricSpec,
@@ -214,6 +216,12 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="twosample-means",
         description="Terminal workflows for two-sample mean analysis.",
     )
+    root_parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_package_version()}",
+        help="Show the installed package version and exit.",
+    )
     commands = root_parser.add_subparsers(dest="command", required=True)
     fetch_parser = commands.add_parser(
         "fetch",
@@ -328,6 +336,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Cluster column for cluster-robust standard errors on "
             "continuous and count metrics."
+        ),
+    )
+    experiment_parser.add_argument(
+        "--strata",
+        default=None,
+        help=(
+            "Column defining randomization strata; enables within-stratum "
+            "sample-ratio mismatch checks."
+        ),
+    )
+    experiment_parser.add_argument(
+        "--balance-columns",
+        action="append",
+        default=[],
+        metavar="COLUMN",
+        help=(
+            "Additional pre-treatment column to check for unit-level "
+            "balance (standardized mean difference) without using it for "
+            "adjustment; repeat as needed."
         ),
     )
     experiment_parser.add_argument(
@@ -559,6 +586,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return root_parser
 
 
+def _package_version() -> str:
+    """Return the installed package version for the ``--version`` flag.
+
+    Falls back to the source-tree ``__version__`` when the package is run
+    from a checkout without installed distribution metadata.
+    """
+    try:
+        return version("twosample-means")
+    except PackageNotFoundError:
+        return __version__
+
+
 def _build_experiment_config(
     args: argparse.Namespace,
 ) -> ExperimentConfig:
@@ -608,6 +647,8 @@ def _build_experiment_config(
         multiplicity_scope=cast(MultiplicityScope, args.multiplicity_scope),
         unit_type=cast(UnitType, args.unit_type),
         cluster=args.cluster,
+        strata=args.strata,
+        balance_columns=tuple(args.balance_columns),
         expected_allocation=expected_allocation,
         seed=args.seed,
     )

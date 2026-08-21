@@ -80,12 +80,233 @@ class CupedMetricResult:
     theta: float | None
     correlation: float | None
     variance_reduction: float | None
+    covariate_leakage_guard: str | None = None
     warnings: tuple[str, ...] = ()
     simultaneous_ci_lower: float | None = None
     simultaneous_ci_upper: float | None = None
     simultaneous_ci_level: float | None = None
     simultaneous_ci_method: str | None = None
     contrast_name: str | None = None
+
+
+LEAKAGE_GUARD_NOTE = (
+    "covariate must be measured before treatment; temporal ordering is "
+    "caller-declared and not verifiable from the data"
+)
+
+
+def _covariate_method_name(metric: MetricSpec) -> str:
+    """Return the report method name for a covariate-adjusted metric."""
+    if metric.covariate_method == "ancova":
+        return "ancova"
+    if metric.covariate_method == "interaction":
+        return "ancova_interaction"
+    return "cuped_welch"
+
+
+def estimate_ancova_metric(
+    data: NormalizedExperimentData,
+    config: ExperimentConfig,
+    metric: MetricSpec,
+    treatment: str | None = None,
+) -> CupedMetricResult:
+    """Fit the ANCOVA specification for a covariate-adjusted effect.
+
+    ``ancova`` fits ``Y ~ treatment + X`` and reports the treatment
+    coefficient with heteroskedasticity-robust (HC1) standard errors;
+    ``interaction`` adds a ``treatment * X`` term so the covariate slope may
+    differ by arm, with the effect evaluated at the mean covariate (the
+    centered design makes this the treatment coefficient directly).
+    ``variance_reduction`` compares the adjusted standard error with the
+    unadjusted Welch standard error: ``1 - (SE_adj / SE_raw)^2``.
+    """
+    validate_metric_inputs(data, config, metric, metric.kind)
+    if metric.covariate is None:
+        raise ValueError("ANCOVA estimation requires a declared covariate")
+    treatment_label = resolve_treatment(config, treatment)
+    frame = data.frame
+    ci_level = 1.0 - config.alpha
+    interaction = metric.covariate_method == "interaction"
+
+    pooled_y = frame[metric.column].to_numpy(dtype=float)
+    pooled_x = frame[metric.covariate].to_numpy(dtype=float)
+    treated = (frame[data.assignment] == treatment_label).to_numpy(dtype=float)
+    complete = ~(np.isnan(pooled_y) | np.isnan(pooled_x))
+    y = pooled_y[complete]
+    x = pooled_x[complete]
+    d = treated[complete]
+    n = int(len(y))
+    excluded = int(len(pooled_y) - n)
+    warnings: list[str] = []
+    if excluded:
+        warnings.append(
+            f"{excluded} row(s) excluded because covariate or outcome "
+            "was missing for the ANCOVA estimate."
+        )
+    if n < 4:
+        return _not_estimable(
+            metric,
+            config,
+            treatment_label,
+            ci_level,
+            "ANCOVA requires at least 4 complete covariate-outcome rows.",
+        )
+    if float(np.var(x, ddof=1)) == 0.0:
+        return _not_estimable(
+            metric,
+            config,
+            treatment_label,
+            ci_level,
+            "ANCOVA is not estimable when the covariate is constant.",
+        )
+    if len(np.unique(d)) < 2:
+        return _not_estimable(
+            metric,
+            config,
+            treatment_label,
+            ci_level,
+            "ANCOVA requires observed rows in both arms.",
+        )
+
+    x_centered = x - float(np.mean(x))
+    ones = np.ones(n)
+    if interaction:
+        design = np.column_stack([ones, d, x_centered, d * x_centered])
+    else:
+        design = np.column_stack([ones, d, x_centered])
+    beta, *_ = np.linalg.lstsq(design, y, rcond=None)
+    residuals = y - design @ beta
+    coefficient_count = design.shape[1]
+    xtx_inverse = np.linalg.inv(design.T @ design)
+    weighted = design * residuals[:, None]
+    meat = weighted.T @ weighted
+    covariance = (
+        xtx_inverse @ meat @ xtx_inverse * (n / (n - coefficient_count))
+    )
+    standard_error = float(np.sqrt(max(covariance[1, 1], 0.0)))
+    if not np.isfinite(standard_error) or standard_error == 0.0:
+        return _not_estimable(
+            metric,
+            config,
+            treatment_label,
+            ci_level,
+            "ANCOVA standard error is not positive for the observed data.",
+        )
+    effect = float(beta[1])
+    theta = float(beta[2]) if coefficient_count >= 3 else None
+    degrees_of_freedom = float(n - coefficient_count)
+    t_statistic = effect / standard_error
+    p_value = float(2.0 * stats.t.sf(abs(t_statistic), degrees_of_freedom))
+    critical_value = float(
+        stats.t.ppf((1.0 + ci_level) / 2.0, degrees_of_freedom)
+    )
+    margin = critical_value * standard_error
+    ci_lower, ci_upper = effect - margin, effect + margin
+
+    control_y = y[d == 0]
+    treatment_y = y[d == 1]
+    unadjusted_effect = float(np.mean(treatment_y) - np.mean(control_y))
+    if len(control_y) < 2 or len(treatment_y) < 2:
+        unadjusted_se = None
+    else:
+        unadjusted_se = float(
+            np.sqrt(
+                np.var(control_y, ddof=1) / len(control_y)
+                + np.var(treatment_y, ddof=1) / len(treatment_y)
+            )
+        )
+    if unadjusted_se is not None and unadjusted_se > 0.0:
+        variance_reduction = 1.0 - (standard_error / unadjusted_se) ** 2
+    else:
+        variance_reduction = None
+    correlation, _ = _within_arm_cuped_stats(
+        frame,
+        data.assignment,
+        metric,
+        config.control,
+        treatment_label,
+        theta if theta is not None else 0.0,
+    )
+
+    control_summary = _raw_arm_summary(
+        control_y, config.control, excluded // 2
+    )
+    treatment_summary = _raw_arm_summary(
+        treatment_y, treatment_label, excluded - excluded // 2
+    )
+    relative_lift = (
+        unadjusted_effect / control_summary.unadjusted_mean
+        if control_summary.unadjusted_mean
+        and control_summary.unadjusted_mean != 0.0
+        else None
+    )
+    if control_summary.unadjusted_mean == 0.0:
+        warnings.append("Relative lift is undefined at zero control mean.")
+
+    return CupedMetricResult(
+        metric_name=metric.name,
+        role=metric.role,
+        family=metric.family,
+        control_label=config.control,
+        treatment_label=treatment_label,
+        method=_covariate_method_name(metric),
+        status="ok",
+        control=control_summary,
+        treatment=treatment_summary,
+        absolute_effect=effect,
+        unadjusted_absolute_effect=unadjusted_effect,
+        relative_lift=relative_lift,
+        standard_error=standard_error,
+        degrees_of_freedom=degrees_of_freedom,
+        ci_lower=float(ci_lower),
+        ci_upper=float(ci_upper),
+        ci_level=ci_level,
+        p_value=p_value,
+        adjusted_p_value=None,
+        practical_effect=metric.practical_effect,
+        practically_significant=practical_significance(
+            float(ci_lower),
+            float(ci_upper),
+            metric.practical_effect,
+        ),
+        theta=theta,
+        correlation=correlation,
+        variance_reduction=variance_reduction,
+        covariate_leakage_guard=LEAKAGE_GUARD_NOTE,
+        warnings=tuple(warnings),
+    )
+
+
+def _raw_arm_summary(
+    values: np.ndarray,
+    label: str,
+    missing: int,
+) -> CupedSummary:
+    """Build an arm summary from raw outcomes for the ANCOVA path."""
+    n = int(len(values))
+    if n == 0:
+        return CupedSummary(label, 0, missing, None, None, None, None)
+    if n < 2:
+        return CupedSummary(
+            label,
+            n,
+            missing,
+            float(np.mean(values)),
+            float(np.mean(values)),
+            None,
+            None,
+        )
+    mean = float(np.mean(values))
+    standard_deviation = float(np.std(values, ddof=1))
+    return CupedSummary(
+        label=label,
+        n=n,
+        missing=missing,
+        mean=mean,
+        unadjusted_mean=mean,
+        standard_deviation=standard_deviation,
+        standard_error=standard_deviation / np.sqrt(n),
+    )
 
 
 def estimate_cuped_metric(
@@ -272,6 +493,7 @@ def estimate_cuped_metric(
         theta=theta,
         correlation=correlation,
         variance_reduction=variance_reduction,
+        covariate_leakage_guard=LEAKAGE_GUARD_NOTE,
         warnings=tuple(warnings),
     )
 
@@ -389,14 +611,14 @@ def _not_estimable(
     ci_level: float,
     warning: str,
 ) -> CupedMetricResult:
-    """Build a structured unavailable CUPED result."""
+    """Build a structured unavailable covariate-adjusted result."""
     return CupedMetricResult(
         metric_name=metric.name,
         role=metric.role,
         family=metric.family,
         control_label=config.control,
         treatment_label=treatment_label,
-        method="cuped_welch",
+        method=_covariate_method_name(metric),
         status="not_estimable",
         control=CupedSummary(config.control, 0, 0, None, None, None, None),
         treatment=CupedSummary(treatment_label, 0, 0, None, None, None, None),
@@ -415,5 +637,6 @@ def _not_estimable(
         theta=None,
         correlation=None,
         variance_reduction=None,
+        covariate_leakage_guard=LEAKAGE_GUARD_NOTE,
         warnings=(warning,),
     )

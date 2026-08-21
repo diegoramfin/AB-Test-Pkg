@@ -117,6 +117,70 @@ def test_config_validates_expected_allocation() -> None:
         make_config(expected_allocation={"control": 0.4, "treatment": 0.4})
 
 
+def test_config_validates_strata_column() -> None:
+    """Strata must be a non-empty string distinct from other columns."""
+    config = make_config(strata="region")
+    assert config.strata == "region"
+
+    with pytest.raises(ValueError, match="non-empty string"):
+        make_config(strata="")
+    with pytest.raises(ValueError, match="differ from unit and assignment"):
+        make_config(strata="user_id")
+    with pytest.raises(ValueError, match="cluster column"):
+        make_config(strata="cluster", cluster="cluster")
+    with pytest.raises(ValueError, match="metric columns"):
+        make_config(strata="converted")
+
+
+def test_config_normalizes_balance_columns() -> None:
+    """List inputs become immutable tuples of column names."""
+    config = make_config(balance_columns=["tenure", "region"])
+
+    assert config.balance_columns == ("tenure", "region")
+
+
+def test_config_rejects_duplicate_balance_columns() -> None:
+    """A column cannot be declared twice in the balance check."""
+    with pytest.raises(ValueError, match="duplicate columns"):
+        make_config(balance_columns=("tenure", "tenure"))
+
+
+def test_config_rejects_empty_balance_column_name() -> None:
+    """Balance column names must be non-empty strings."""
+    with pytest.raises(ValueError, match="non-empty strings"):
+        make_config(balance_columns=("tenure", ""))
+
+
+def test_config_rejects_balance_column_overlapping_metric_covariate() -> None:
+    """A metric covariate is already checked; balance cannot duplicate it."""
+    metrics = (
+        MetricSpec(
+            name="revenue",
+            column="revenue",
+            kind="continuous",
+            role="primary",
+            covariate="tenure",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="metric covariate columns"):
+        make_config(metrics=metrics, balance_columns=("tenure",))
+
+
+def test_config_rejects_balance_column_overlapping_reserved_columns() -> None:
+    """Balance columns must differ from assignment, cluster, and metrics."""
+    with pytest.raises(ValueError, match="differ from unit, assignment"):
+        make_config(balance_columns=("user_id",))
+    with pytest.raises(ValueError, match="differ from unit, assignment"):
+        make_config(balance_columns=("converted",))
+    with pytest.raises(ValueError, match="differ from unit, assignment"):
+        make_config(
+            balance_columns=("cluster",),
+            cluster="cluster",
+            strata="region",
+        )
+
+
 def test_normalize_returns_user_level_contract() -> None:
     """Normalization preserves rows while canonicalizing metric values."""
     result = normalize_experiment_data(make_data(), make_config())

@@ -1,5 +1,7 @@
 # twosample-means
 
+![coverage](coverage.svg)
+
 An auditable terminal-first analysis engine for independent two-sample
 outcomes and randomized experiments. It reports binary, continuous, count, and
 ratio estimates plus frequentist, non-parametric, Bayesian, and effect-size
@@ -8,7 +10,30 @@ results without making accept/reject decisions.
 This is not a general A/B experimentation suite: it does not provide
 assignment generation, automatic causal validation, or guaranteed user-level
 randomization. Treat the legacy battery as sensitivity analysis, not
-independent confirmatory evidence.
+independent confirmatory evidence. Difference-in-differences lives in a
+separate `quasi_experimental` namespace because it rests on different
+identifying assumptions.
+
+## Installation
+
+Requires **Python 3.11 or newer**.
+
+```bash
+pip install twosample-means
+# or, with uv
+uv add twosample-means
+```
+
+Optional extras:
+
+```bash
+pip install "twosample-means[kaggle]"   # Kaggle dataset retrieval
+pip install "twosample-means[docs]"      # documentation site tooling
+```
+
+Check the installed version with `twosample-means --version`. The package
+ships a PEP 561 `py.typed` marker, so type checkers get inline annotations
+from the installed distribution.
 
 ## Quick start: conversion-rate analysis
 
@@ -135,6 +160,23 @@ uv run twosample-means experiment data/checkout.csv \
   --cluster store_id
 ```
 
+Declared randomization strata enable within-stratum sample-ratio mismatch
+checks, which catch offsetting imbalances a marginal test cannot see:
+
+```bash
+uv run twosample-means experiment data/checkout.csv \
+  ... --strata region \
+  --expected-allocation control=0.5,treatment=0.5
+```
+
+Covariates that are not used for adjustment can still be checked for
+pre-treatment balance with `--balance-columns` (repeatable):
+
+```bash
+uv run twosample-means experiment data/checkout.csv \
+  ... --balance-columns tenure --balance-columns device_score
+```
+
 Every generated `report.json` is validated against the bundled
 `experiment-result-v1` JSON Schema before it is written, so rendered reports
 cannot silently drift from the declared contract.
@@ -250,12 +292,15 @@ nominal `ci_lower`/`ci_upper` fields remain available alongside
 - `kind="ratio"` requires `numerator="..."` and `denominator="..."` columns
   and estimates a ratio of user-level means with delta-method uncertainty.
   Denominators must be positive.
-- `MetricSpec(covariate="pre_period_column")` enables CUPED variance
-  reduction (Deng et al., 2013) for continuous and count metrics. Outcomes
-  are adjusted with the pooled covariate slope; the report shows the
-  adjusted effect, within-arm covariate correlation, theta, and the
-  variance reduction percentage. CUPED assumes the covariate is measured
-  before treatment — the caller declares and verifies that.
+- `MetricSpec(covariate="pre_period_column")` enables variance reduction
+  for continuous and count metrics. `covariate_method` selects the
+  estimator: `"cuped"` (default; Deng et al., 2013) residualizes outcomes
+  with the pooled slope and uses Welch inference; `"ancova"` fits
+  `Y ~ treatment + X` with heteroskedasticity-robust standard errors;
+  `"interaction"` adds a `treatment * X` term for arm-specific slopes
+  with the effect at the mean covariate. Every covariate-adjusted report
+  carries an explicit covariate leakage guard stating that temporal
+  ordering is caller-declared and not verifiable from the data.
 - `ExperimentConfig(cluster="cluster_column")` enables cluster-robust
   (Liang & Zeger, 1986) standard errors for continuous, count, and ratio
   metrics. The CR1 sandwich with a small-sample correction and `G-2`
@@ -274,10 +319,30 @@ nominal `ci_lower`/`ci_upper` fields remain available alongside
   alpha-spending looks. Boundaries are calibrated by recursive numerical
   quadrature over the canonical group-sequential joint distribution, so the
   family-wise error rate across all looks equals the declared alpha.
-  `marginal_alpha_spending_boundaries()` remains available for reference.
+  `sequential_power()` reports power and average sample information under
+  those boundaries. `marginal_alpha_spending_boundaries()` remains
+  available for reference.
+- `always_valid_confidence_sequence()` and
+  `difference_confidence_sequence()` build time-uniform (always-valid)
+  confidence sequences (Howard et al., 2021): every interval is valid
+  simultaneously, so repeated peeking does not inflate the error rate.
 - `write_experiment_report()` writes `report.html` alongside the Markdown
   and JSON files: a self-contained document with inline styling and no
   external assets.
+- Assignment diagnostics include a pre-treatment covariate balance table:
+  every declared metric covariate is compared against the control arm with a
+  standardized mean difference (SMD) at the randomization-unit level, and
+  |SMD| > 0.1 flags imbalance. `ExperimentConfig.balance_columns` (CLI
+  `--balance-columns`, repeatable) adds columns to the balance check without
+  using them for variance reduction. When `ExperimentConfig.strata` is set,
+  the sample-ratio mismatch test also runs within each stratum and the
+  report lists per-stratum p-values.
+- The `twosample_means.quasi_experimental` namespace provides
+  `DifferenceInDifferences` for the canonical two-group panel design with
+  cluster-robust standard errors, panel and treatment-timing validation,
+  event-study coefficients, and a parallel-trends placebo test.
+  `render_did_markdown()` writes a report that lists the identifying
+  assumptions explicitly.
 
 ## Examples
 
@@ -297,6 +362,21 @@ uv run python examples/01_binary_conversion.py artifacts/examples/conversion
   sequential looks.
 - `05_clustered_ratio.py` — store-clustered revenue-per-order ratio with
   cluster-robust delta-method inference.
+- `06_holm_multiplicity.py` — two same-family monetization metrics where
+  Holm correction flips the primary's nominal significance.
+- `07_multi_arm_contrasts.py` — three-arm experiment with predeclared
+  planned contrasts, including a direct variant-vs-variant comparison.
+- `08_separate_csvs.py` — separate control/treatment CSV ingestion with
+  synthesized assignment labels.
+- `09_sequential_analysis.py` — evaluating a running experiment at planned
+  looks against calibrated group-sequential boundaries.
+- `10_difference_in_differences.py` — region-clustered store panel with an
+  event study and a parallel-trends placebo test.
+- `11_kaggle_manifest_adapter.py` — consuming a Kaggle cache through its
+  manifest contract, including the teaching-sample quality warning.
+- `12_stratified_balance.py` — two-region experiment whose marginal
+  allocation passes SRM while both strata fail, plus a covariate balance
+  table that flags the imbalanced covariate.
 
 Experiment JSON reports use the bundled `experiment-result-v1` JSON Schema.
 The schema is versioned independently from the Python package release.
@@ -318,7 +398,7 @@ Every method includes an academic citation in the result.
 ```bash
 uv run ruff format --check .
 uv run ruff check .
-uv run mypy src/twosample_means tests
+uv run mypy src/twosample_means tests examples
 uv run pytest --cov --cov-report=term-missing
 uv build
 
@@ -326,6 +406,9 @@ uv build
 uv run pytest tests/test_wheel_cli.py
 # Use uv's local cache only when network access is unavailable.
 TWOSAMPLE_MEANS_WHEEL_OFFLINE=1 uv run pytest tests/test_wheel_cli.py
+
+# Documentation site (mkdocs).
+uv run --extra docs mkdocs build --strict
 ```
 
 ## Project layout
@@ -333,6 +416,8 @@ TWOSAMPLE_MEANS_WHEEL_OFFLINE=1 uv run pytest tests/test_wheel_cli.py
 ```text
 src/twosample_means/  # library and terminal commands
 data/demos/       # packaged, versioned demo data
+examples/         # runnable, smoke-tested example workflows
+docs/             # documentation site (mkdocs)
 tests/            # automated test suite
 CONTRIBUTING.md   # contribution and quality-gate guidance
 SECURITY.md       # vulnerability reporting policy

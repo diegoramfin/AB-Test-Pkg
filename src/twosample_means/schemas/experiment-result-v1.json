@@ -37,7 +37,38 @@
       "properties": {
         "status": { "enum": ["ok", "warning"] },
         "assignment_counts": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
-        "warnings": { "type": "array", "items": { "type": "string" } }
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "covariate_balance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["covariate", "arm", "smd", "exceeds_threshold"],
+            "properties": {
+              "covariate": { "type": "string" },
+              "arm": { "type": "string" },
+              "smd": { "type": ["number", "null"] },
+              "control_mean": { "type": ["number", "null"] },
+              "arm_mean": { "type": ["number", "null"] },
+              "pooled_sd": { "type": ["number", "null"] },
+              "exceeds_threshold": { "type": "boolean" },
+              "warning": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "stratum_srm": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["stratum", "n", "p_value"],
+            "properties": {
+              "stratum": { "type": ["string", "null"] },
+              "n": { "type": "integer", "minimum": 0 },
+              "p_value": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+              "observed": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+              "expected": { "type": "object", "additionalProperties": { "type": "number" } }
+            }
+          }
+        }
       }
     },
     "metrics": {

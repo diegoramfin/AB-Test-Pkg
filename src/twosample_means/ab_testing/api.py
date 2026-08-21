@@ -11,7 +11,7 @@ from .clustered import estimate_clustered_metric
 from .config import ContrastSpec, ExperimentConfig, MetricSpec
 from .continuous import estimate_continuous_metric
 from .count import estimate_count_metric
-from .cuped import estimate_cuped_metric
+from .cuped import estimate_ancova_metric, estimate_cuped_metric
 from .data import NormalizedExperimentData, normalize_experiment_data
 from .diagnostics import diagnose_assignment
 from .multiplicity import apply_multiplicity
@@ -105,22 +105,33 @@ def _estimate_metric(
         # Estimators orient their effect around config.control. A planned
         # arbitrary contrast uses a temporary immutable config with the
         # requested control while retaining every other analysis setting.
+        # Contrasts are dropped because they re-resolve ``control=None``
+        # entries against the swapped control, which can turn a valid
+        # sibling contrast into a self-comparison; the estimator never reads
+        # ``contrasts``, and the caller reapplies contrast naming afterward.
         all_arms = (config.control, *config.treatments)
         comparison_config = replace(
             config,
             control=control,
             treatments=tuple(arm for arm in all_arms if arm != control),
+            contrasts=None,
         )
     if comparison_config.cluster is not None:
         return estimate_clustered_metric(
             normalized, comparison_config, metric, treatment=treatment
         )
     if metric.covariate is not None:
-        if metric.kind != "binary" and metric.kind != "ratio":
+        if metric.kind == "binary" or metric.kind == "ratio":
+            raise ValueError(
+                f"covariate is not valid for kind={metric.kind!r}"
+            )
+        if metric.covariate_method == "cuped":
             return estimate_cuped_metric(
                 normalized, comparison_config, metric, treatment=treatment
             )
-        raise ValueError(f"covariate is not valid for kind={metric.kind!r}")
+        return estimate_ancova_metric(
+            normalized, comparison_config, metric, treatment=treatment
+        )
 
     if metric.kind == "binary":
         return estimate_binary_metric(

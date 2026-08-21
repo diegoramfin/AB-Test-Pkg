@@ -20,3 +20,7 @@ data/cache/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache
+
+# Editor-local configuration
+.vscode/
+site/

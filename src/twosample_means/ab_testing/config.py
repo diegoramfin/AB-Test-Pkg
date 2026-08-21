@@ -13,6 +13,7 @@ MissingPolicy = Literal["exclude", "error"]
 Multiplicity = Literal["none", "holm", "fdr_bh"]
 MultiplicityScope = Literal["family", "global"]
 UnitType = Literal["user", "aggregate", "unknown"]
+CovariateMethod = Literal["cuped", "ancova", "interaction"]
 
 
 @dataclass(frozen=True)
@@ -24,11 +25,19 @@ class MetricSpec:
     metrics, and ratio units for ratio metrics. It is a reporting threshold,
     not a statistical decision rule.
 
-    ``covariate`` enables CUPED variance reduction for continuous and count
+    ``covariate`` enables variance reduction for continuous and count
     metrics. The column must contain pre-experiment values measured before
-    treatment; the estimator adjusts outcomes with the pooled covariate slope
-    and reports the variance reduction. It is the caller's responsibility to
-    confirm the covariate predates treatment.
+    treatment; the estimator adjusts outcomes with the covariate and reports
+    the variance reduction. It is the caller's responsibility to confirm the
+    covariate predates treatment.
+
+    ``covariate_method`` selects the adjustment estimator: ``cuped`` (the
+    default) residualizes outcomes with the pooled slope and uses Welch
+    inference on the adjusted values; ``ancova`` fits the regression model
+    ``Y ~ treatment + X`` and reports the treatment coefficient with
+    heteroskedasticity-robust standard errors; ``interaction`` additionally
+    includes a ``treatment * X`` interaction, allowing arm-specific slopes
+    with the effect evaluated at the mean covariate.
     """
 
     name: str
@@ -42,6 +51,7 @@ class MetricSpec:
     numerator: str | None = None
     denominator: str | None = None
     covariate: str | None = None
+    covariate_method: CovariateMethod = "cuped"
 
     def __post_init__(self) -> None:
         """Validate the metric declaration."""
@@ -104,6 +114,11 @@ class MetricSpec:
             raise ValueError(
                 "success_value is only configurable for binary metrics"
             )
+        if self.covariate_method not in ("cuped", "ancova", "interaction"):
+            raise ValueError(
+                "covariate_method must be 'cuped', 'ancova', or "
+                f"'interaction', got {self.covariate_method!r}"
+            )
         if self.covariate is not None:
             if (
                 not isinstance(self.covariate, str)
@@ -118,6 +133,8 @@ class MetricSpec:
                 raise ValueError(
                     "covariate must differ from the metric column"
                 )
+        elif self.covariate_method != "cuped":
+            raise ValueError("covariate_method requires a declared covariate")
 
 
 @dataclass(frozen=True)
@@ -163,6 +180,8 @@ class ExperimentConfig:
     multiplicity_scope: MultiplicityScope = "family"
     unit_type: UnitType = "user"
     cluster: str | None = None
+    strata: str | None = None
+    balance_columns: tuple[str, ...] = ()
     expected_allocation: dict[str, float] | None = None
     time_column: str | None = None
     analysis_start: str | None = None
@@ -173,6 +192,9 @@ class ExperimentConfig:
         """Normalize collection inputs and validate the analysis plan."""
         object.__setattr__(self, "treatments", tuple(self.treatments))
         object.__setattr__(self, "metrics", tuple(self.metrics))
+        object.__setattr__(
+            self, "balance_columns", tuple(self.balance_columns)
+        )
         if self.contrasts is not None:
             object.__setattr__(self, "contrasts", tuple(self.contrasts))
         if self.expected_allocation is not None:
@@ -286,6 +308,60 @@ class ExperimentConfig:
             raise ValueError(
                 "cluster column must differ from unit and assignment columns"
             )
+        if self.strata is not None:
+            if not isinstance(self.strata, str) or not self.strata.strip():
+                raise ValueError("strata must be a non-empty string")
+            if self.strata in {self.unit_id, self.assignment}:
+                raise ValueError(
+                    "strata column must differ from unit and assignment "
+                    "columns"
+                )
+            if self.strata == self.cluster:
+                raise ValueError(
+                    "strata column must differ from the cluster column"
+                )
+            if self.strata in metric_columns:
+                raise ValueError(
+                    "strata column must differ from metric columns"
+                )
+        if self.balance_columns:
+            if any(
+                not isinstance(column, str) or not column.strip()
+                for column in self.balance_columns
+            ):
+                raise ValueError(
+                    "balance_columns must contain non-empty strings"
+                )
+            if len(set(self.balance_columns)) != len(self.balance_columns):
+                raise ValueError(
+                    "balance_columns must not contain duplicate columns"
+                )
+            covariate_columns = {
+                metric.covariate
+                for metric in self.metrics
+                if metric.covariate is not None
+            }
+            overlapping_covariates = set(self.balance_columns).intersection(
+                covariate_columns
+            )
+            if overlapping_covariates:
+                labels = ", ".join(sorted(overlapping_covariates))
+                raise ValueError(
+                    "balance_columns must not overlap metric covariate "
+                    f"columns: {labels}"
+                )
+            reserved = (
+                reserved_columns | metric_columns | {self.cluster, self.strata}
+            )
+            overlapping_reserved = set(self.balance_columns).intersection(
+                reserved
+            )
+            if overlapping_reserved:
+                labels = ", ".join(sorted(overlapping_reserved))
+                raise ValueError(
+                    "balance_columns must differ from unit, assignment, "
+                    "cluster, strata, and metric columns: " + labels
+                )
         if self.time_column is None and (
             self.analysis_start is not None or self.analysis_end is not None
         ):

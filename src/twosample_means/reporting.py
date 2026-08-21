@@ -304,6 +304,53 @@ def render_experiment_markdown(result: ExperimentResult) -> str:
             f"{diagnostics.sample_ratio_mismatch_p_value}",
         ]
     )
+    if diagnostics.covariate_balance:
+        lines.extend(
+            [
+                "",
+                "### Covariate balance (standardized mean difference)",
+                "",
+                "| Covariate | Arm | Control mean | Arm mean | "
+                "Pooled SD | SMD |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for entry in diagnostics.covariate_balance:
+            smd_cell = f"{entry.smd:.4f}" if entry.smd is not None else "n/a"
+            flag = " ⚠" if entry.exceeds_threshold else ""
+            lines.append(
+                f"| {entry.covariate} | {entry.arm} | "
+                f"{_format_report_value(entry.control_mean)} | "
+                f"{_format_report_value(entry.arm_mean)} | "
+                f"{_format_report_value(entry.pooled_sd)} | "
+                f"{smd_cell}{flag} |"
+            )
+        lines.extend(
+            [
+                "",
+                "*Threshold: |SMD| > 0.1 flags imbalance.*",
+            ]
+        )
+    if diagnostics.stratum_srm:
+        lines.extend(
+            [
+                "",
+                "### Sample-ratio mismatch by stratum",
+                "",
+                "| Stratum | n | SRM p-value |",
+                "|---|---:|---:|",
+            ]
+        )
+        for stratum_entry in diagnostics.stratum_srm:
+            p_cell = (
+                f"{stratum_entry.p_value:.4g}"
+                if stratum_entry.p_value is not None
+                else "n/a"
+            )
+            lines.append(
+                f"| {stratum_entry.stratum} | {stratum_entry.n} | {p_cell} |"
+            )
+        lines.append("")
     for warning in diagnostics.warnings:
         lines.append(f"- **Warning**: {warning}")
     lines.extend(["", "## Metrics", ""])
@@ -421,6 +468,57 @@ def render_experiment_html(result: ExperimentResult) -> str:
             "</table>",
         ]
     )
+    if diagnostics.covariate_balance:
+        lines.extend(
+            [
+                "<h3>Covariate balance (SMD)</h3>",
+                '<table class="meta">',
+                "<tr><th>Covariate</th><th>Arm</th><th>Control "
+                "mean</th><th>Arm mean</th><th>Pooled SD</th>"
+                "<th>SMD</th></tr>",
+            ]
+        )
+        for entry in diagnostics.covariate_balance:
+            smd_cell = f"{entry.smd:.4f}" if entry.smd is not None else "n/a"
+            if entry.exceeds_threshold:
+                smd_cell = f"{smd_cell} ⚠"
+            lines.extend(
+                [
+                    "<tr>",
+                    f"<td>{escape(entry.covariate)}</td>",
+                    f"<td>{escape(entry.arm)}</td>",
+                    f"<td>{escape(str(entry.control_mean))}</td>",
+                    f"<td>{escape(str(entry.arm_mean))}</td>",
+                    f"<td>{escape(str(entry.pooled_sd))}</td>",
+                    f"<td>{escape(smd_cell)}</td>",
+                    "</tr>",
+                ]
+            )
+        lines.append("</table>")
+    if diagnostics.stratum_srm:
+        lines.extend(
+            [
+                "<h3>Sample-ratio mismatch by stratum</h3>",
+                '<table class="meta">',
+                "<tr><th>Stratum</th><th>n</th><th>SRM p-value</th></tr>",
+            ]
+        )
+        for stratum_entry in diagnostics.stratum_srm:
+            p_cell = (
+                f"{stratum_entry.p_value:.4g}"
+                if stratum_entry.p_value is not None
+                else "n/a"
+            )
+            lines.extend(
+                [
+                    "<tr>",
+                    f"<td>{escape(str(stratum_entry.stratum))}</td>",
+                    f"<td>{stratum_entry.n}</td>",
+                    f"<td>{escape(p_cell)}</td>",
+                    "</tr>",
+                ]
+            )
+        lines.append("</table>")
     if diagnostics.warnings:
         lines.append('<ul class="warnings">')
         for warning in diagnostics.warnings:
@@ -512,6 +610,10 @@ def _render_experiment_metric_html(metric: Any) -> list[str]:
         ("Risk ratio", getattr(metric, "risk_ratio", None)),
         ("Variance reduction", getattr(metric, "variance_reduction", None)),
         ("CUPED theta", getattr(metric, "theta", None)),
+        (
+            "Covariate leakage guard",
+            getattr(metric, "covariate_leakage_guard", None),
+        ),
         ("Clusters", getattr(metric, "clusters", None)),
         (
             "Naive standard error",
@@ -613,6 +715,10 @@ def _render_experiment_metric(metric: Any) -> list[str]:
         ),
         ("Variance reduction", getattr(metric, "variance_reduction", None)),
         ("CUPED theta", getattr(metric, "theta", None)),
+        (
+            "Covariate leakage guard",
+            getattr(metric, "covariate_leakage_guard", None),
+        ),
         ("Clusters", getattr(metric, "clusters", None)),
         (
             "Naive standard error",
