@@ -473,6 +473,10 @@ Delivered scripts (each smoke-tested in CI and writing to an ignored
     randomization inside regional strata: cluster-robust SEs wider than
     the naive user-level interval, per-stratum SRM, and a balance table
     that mixes a CUPED covariate with a balance-only column.
+14. `examples/14_clustered_stratified_balance_cli.py` — the same design
+    driven entirely through `twosample-means experiment` with
+    `--cluster`, `--strata`, and `--balance-columns` on a generated CSV,
+    proving the flags reach the analysis end-to-end.
 
 ## Recommended project layout
 

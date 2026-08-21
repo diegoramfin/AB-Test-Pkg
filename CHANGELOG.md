@@ -36,6 +36,9 @@ All notable changes to `twosample-means` are documented here.
 - `examples/13_clustered_stratified_balance.py` combining store-level
   cluster-robust inference, regional strata, and balance-only columns in
   one experiment report.
+- `examples/14_clustered_stratified_balance_cli.py` driving the same
+  design through the `twosample-means experiment` CLI with `--cluster`,
+  `--strata`, and `--balance-columns`, smoke-tested in CI.
 - End-to-end FWER simulation for calibrated group-sequential boundaries: a
   seeded Monte Carlo test that runs the real experiment pipeline (binary
   estimator, p-value to signed z conversion, boundary comparison) under the

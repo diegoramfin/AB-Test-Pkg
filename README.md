@@ -380,6 +380,10 @@ uv run python examples/01_binary_conversion.py artifacts/examples/conversion
 - `13_clustered_stratified_balance.py` — store-level randomization inside
   regional strata: cluster-robust SEs wider than naive, per-stratum SRM,
   and a balance table mixing a CUPED covariate with a balance-only column.
+- `14_clustered_stratified_balance_cli.py` — the same design driven
+  entirely through `twosample-means experiment` with `--cluster`,
+  `--strata`, and `--balance-columns` on a generated CSV, proving the
+  flags work end-to-end from the terminal.
 
 Experiment JSON reports use the bundled `experiment-result-v1` JSON Schema.
 The schema is versioned independently from the Python package release.

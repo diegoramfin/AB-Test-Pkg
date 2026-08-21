@@ -45,6 +45,7 @@ SUMMARY_FILES = {
         "11_kaggle_manifest_adapter",
         "12_stratified_balance",
         "13_clustered_stratified_balance",
+        "14_clustered_stratified_balance_cli",
     ],
 )
 def test_example_runs_to_completion(
@@ -123,6 +124,28 @@ def test_example_runs_to_completion(
             for entry in diagnostics["covariate_balance"]
         }
         assert set(balance) == {"pre_spend", "device_score"}
+        assert balance["pre_spend"]["smd"] == pytest.approx(0.0, abs=1e-9)
+        assert balance["device_score"]["exceeds_threshold"] is True
+        primary = report["metrics"][0]
+        assert primary["cluster_robust"] is True
+        assert primary["standard_error"] > primary["naive_standard_error"]
+    if module_name == "14_clustered_stratified_balance_cli":
+        # The point of this example is that the CLI flags survive the full
+        # round trip: the config recorded in the report must show cluster,
+        # strata, and balance columns, and the analysis must reflect them.
+        report = json.loads(
+            (output / "report.json").read_text(encoding="utf-8")
+        )
+        config = report["config"]
+        assert config["cluster"] == "store_id"
+        assert config["strata"] == "region"
+        assert config["balance_columns"] == ["device_score"]
+        diagnostics = report["assignment_diagnostics"]
+        assert len(diagnostics["stratum_srm"]) == 2
+        balance = {
+            entry["covariate"]: entry
+            for entry in diagnostics["covariate_balance"]
+        }
         assert balance["pre_spend"]["smd"] == pytest.approx(0.0, abs=1e-9)
         assert balance["device_score"]["exceeds_threshold"] is True
         primary = report["metrics"][0]
