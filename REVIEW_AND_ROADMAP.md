@@ -469,6 +469,10 @@ Delivered scripts (each smoke-tested in CI and writing to an ignored
 12. `examples/12_stratified_balance.py` — stratified experiment where the
     marginal SRM passes while per-stratum SRM fails, plus a covariate
     balance table with an SMD flag.
+13. `examples/13_clustered_stratified_balance.py` — store-level
+    randomization inside regional strata: cluster-robust SEs wider than
+    the naive user-level interval, per-stratum SRM, and a balance table
+    that mixes a CUPED covariate with a balance-only column.
 
 ## Recommended project layout
 

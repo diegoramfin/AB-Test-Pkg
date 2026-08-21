@@ -44,6 +44,7 @@ SUMMARY_FILES = {
         "10_difference_in_differences",
         "11_kaggle_manifest_adapter",
         "12_stratified_balance",
+        "13_clustered_stratified_balance",
     ],
 )
 def test_example_runs_to_completion(
@@ -104,4 +105,27 @@ def test_example_runs_to_completion(
             entry["exceeds_threshold"]
             for entry in diagnostics["covariate_balance"]
         )
+    if module_name == "13_clustered_stratified_balance":
+        # The point of this example is cluster + strata + balance together:
+        # SRM passes at both levels, the balance-only column is flagged, and
+        # the cluster-robust SE is wider than the naive user-level SE.
+        report = json.loads(
+            (output / "report.json").read_text(encoding="utf-8")
+        )
+        diagnostics = report["assignment_diagnostics"]
+        assert len(diagnostics["stratum_srm"]) == 2
+        assert all(
+            entry["p_value"] is not None and entry["p_value"] > 0.05
+            for entry in diagnostics["stratum_srm"]
+        )
+        balance = {
+            entry["covariate"]: entry
+            for entry in diagnostics["covariate_balance"]
+        }
+        assert set(balance) == {"pre_spend", "device_score"}
+        assert balance["pre_spend"]["smd"] == pytest.approx(0.0, abs=1e-9)
+        assert balance["device_score"]["exceeds_threshold"] is True
+        primary = report["metrics"][0]
+        assert primary["cluster_robust"] is True
+        assert primary["standard_error"] > primary["naive_standard_error"]
     assert capsys.readouterr().out != ""

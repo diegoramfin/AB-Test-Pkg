@@ -377,6 +377,9 @@ uv run python examples/01_binary_conversion.py artifacts/examples/conversion
 - `12_stratified_balance.py` — two-region experiment whose marginal
   allocation passes SRM while both strata fail, plus a covariate balance
   table that flags the imbalanced covariate.
+- `13_clustered_stratified_balance.py` — store-level randomization inside
+  regional strata: cluster-robust SEs wider than naive, per-stratum SRM,
+  and a balance table mixing a CUPED covariate with a balance-only column.
 
 Experiment JSON reports use the bundled `experiment-result-v1` JSON Schema.
 The schema is versioned independently from the Python package release.

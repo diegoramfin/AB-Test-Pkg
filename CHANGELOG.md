@@ -33,6 +33,9 @@ All notable changes to `twosample-means` are documented here.
   balance without being used for variance reduction. Validated against
   reserved columns and metric covariates, and rendered in the report's
   covariate balance table.
+- `examples/13_clustered_stratified_balance.py` combining store-level
+  cluster-robust inference, regional strata, and balance-only columns in
+  one experiment report.
 - End-to-end FWER simulation for calibrated group-sequential boundaries: a
   seeded Monte Carlo test that runs the real experiment pipeline (binary
   estimator, p-value to signed z conversion, boundary comparison) under the
