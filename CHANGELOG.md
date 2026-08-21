@@ -2,10 +2,18 @@
 
 All notable changes to `twosample-means` are documented here.
 
-## [Unreleased]
+## [0.2.0] - 2026-08-21
 
 ### Added
 
+- `src/` package layout with clean wheel-boundary imports.
+- Count metrics analyzed as unit-level means with Welch inference.
+- User-level ratio metrics with delta-method uncertainty.
+- Seeded simulation-based power and MDE planning APIs.
+- Alpha-spending sequential-look plans using O'Brien–Fleming or Pocock spending.
+- Explicit `ContrastSpec` declarations for planned multi-arm contrasts.
+- Versioned `experiment-result-v1` JSON Schema bundled in the wheel.
+- Release metadata, citation information, and package URLs.
 - Explicit experiment `unit_type` semantics with aggregate/unknown warnings.
 - Separate control/treatment CSV ingestion for experiment analyses.
 - CLI count and ratio metric declarations.
@@ -113,19 +121,6 @@ All notable changes to `twosample-means` are documented here.
 - Self-contained HTML experiment reports.
 - Runnable `examples/` workflows with pytest smoke coverage.
 - ``CONTRIBUTING.md`` and ``SECURITY.md`` release-hygiene documentation.
-
-## [0.2.0] - 2026-08-19
-
-### Added
-
-- `src/` package layout with clean wheel-boundary imports.
-- Count metrics analyzed as unit-level means with Welch inference.
-- User-level ratio metrics with delta-method uncertainty.
-- Seeded simulation-based power and MDE planning APIs.
-- Alpha-spending sequential-look plans using O'Brien–Fleming or Pocock spending.
-- Explicit `ContrastSpec` declarations for planned multi-arm contrasts.
-- Versioned `experiment-result-v1` JSON Schema bundled in the wheel.
-- Release metadata, citation information, and package URLs.
 
 ### Changed
 

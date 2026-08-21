@@ -677,7 +677,7 @@ baseline. Coverage should support statistical validation, not replace it.
 - [x] Semantic versioning policy documented (CHANGELOG + `version` gate).
 - [x] Changelog started.
 - [x] `CITATION.cff` added for academic/portfolio use.
-- [ ] Initial tag created only after CI is green.
+- [x] Initial tag created only after CI is green (`v0.2.0`, 2026-08-21).
 
 ### Quality gates
 
